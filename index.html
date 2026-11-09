@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r8</title>
+<title>Naples Home Search Map r10</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -47,7 +47,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r8</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r10</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -82,6 +82,7 @@
 
   <h2>Layers</h2>
   <div id="layers"></div>
+  <div class="note">Store and hospital pins have a dark border. Home listings have a white border.</div>
   <div class="row"><label>Base map</label>
     <select id="basemap">
       <option value="street">Street (Esri)</option>
@@ -407,18 +408,20 @@ $('basemap').onchange = e => { map.removeLayer(curBase); curBase = BASE[e.target
 
 map.createPane('rasters'); map.getPane('rasters').style.zIndex = 350;
 map.createPane('sweet');   map.getPane('sweet').style.zIndex = 420;
+map.getPane('rasters').style.pointerEvents = 'none'; map.getPane('sweet').style.pointerEvents = 'none';   // shading never blocks clicks
+map.createPane('listingsPane'); map.getPane('listingsPane').style.zIndex = 650;                           // pins above all shading
 
 const LAYERS = [
   {k:'sweet',   label:'Sweet spot (meets everything)', color:'#1f8a4c', on:true},
   {k:'near',    label:'Near-miss (fails one condition)', color:'#f2c94c', on:false},
-  {k:'flood',   label:'FEMA flood zones', color:'#2f80ed', on:true},
-  {k:'evac',    label:'Evacuation zones', color:'#eb5757', on:true},
+  {k:'flood',   label:'FEMA flood zones', color:'#2f80ed', on:false},
+  {k:'evac',    label:'Evacuation zones', color:'#eb5757', on:false},
   {k:'corr',    label:'Highway corridor', color:'#9b51e0', on:false},
   {k:'groc',    label:'Grocery radius', color:'#27ae60', on:false},
   {k:'hosp',    label:'Hospital radius', color:'#e84393', on:false},
   {k:'club',    label:'Costco / Sam\'s radius', color:'#f2994a', on:false},
   {k:'roads',   label:'I-75 / US-41 lines used', color:'#1d2327', on:true},
-  {k:'poiClub', label:'Costco / Sam\'s Club stores', color:'#e67e22', on:true},
+  {k:'poiClub', label:'Costco / Sam\'s Club stores', color:'#e67e22', on:false},
   {k:'poiHosp', label:'Hospitals', color:'#c0392b', on:true},
   {k:'poiGroc', label:'Grocery stores (Walmart/Publix/Winn-Dixie)', color:'#2e7d32', on:false},
   {k:'poiWal',  label:'Walmart stores', color:'#0071ce', on:true},
@@ -428,9 +431,11 @@ const LAYERS = [
   {k:'draw',    label:'My drawings', color:'#3388ff', on:true},
   {k:'listings',label:'Listings (from your file)', color:'#1b9e3a', on:true}
 ];
+let SAVED_ON={}; try{ SAVED_ON=JSON.parse(localStorage.getItem('naples-layers')||'{}'); }catch(e){}
+LAYERS.forEach(l=>{ if(l.k in SAVED_ON) l.on=!!SAVED_ON[l.k]; });
 const LG = {}; LAYERS.forEach(l=>{ LG[l.k]=L.layerGroup(); if(l.on) LG[l.k].addTo(map); });
 $('layers').innerHTML = LAYERS.map(l=>`<label class="lyr"><input type="checkbox" data-k="${l.k}" ${l.on?'checked':''}><span class="sw" style="background:${l.color}"></span>${l.label}</label>`).join('');
-$('layers').addEventListener('change', e=>{ const k=e.target.dataset.k; if(!k) return; e.target.checked ? LG[k].addTo(map) : map.removeLayer(LG[k]); });
+$('layers').addEventListener('change', e=>{ const k=e.target.dataset.k; if(!k) return; e.target.checked ? LG[k].addTo(map) : map.removeLayer(LG[k]); try{ SAVED_ON[k]=e.target.checked; localStorage.setItem('naples-layers', JSON.stringify(SAVED_ON)); }catch(err){} });
 
 if(L.esri) LG.femaLive.addLayer(L.esri.dynamicMapLayer({url:CFG.fema[0], layers:[CFG.femaLayer], opacity:0.55}));
 
@@ -542,13 +547,13 @@ function render(){
     r.us41.forEach(l=>LG.roads.addLayer(L.polyline(l,{color:'#c0392b',weight:4,opacity:.9}).bindTooltip('US-41 (counted)'))); }
   // POIs
   LG.poiClub.clearLayers(); LG.poiHosp.clearLayers(); LG.poiGroc.clearLayers(); LG.poiWal.clearLayers(); LG.poiAmz.clearLayers();
-  if(r.wal) r.wal.forEach(p=>LG.poiWal.addLayer(L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1.5,fillColor:'#0071ce',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:''))));
+  if(r.wal) r.wal.forEach(p=>LG.poiWal.addLayer(L.circleMarker([p.lat,p.lon],{radius:7,color:'#111',weight:3,fillColor:'#0071ce',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:''))));
   if(D.pois&&D.pois.amazon) D.pois.amazon.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{radius:9,color:'#232f3e',weight:2,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:''))));
   if(D.pois&&D.pois.amzLocker) D.pois.amzLocker.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{radius:4,color:'#232f3e',weight:1,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name)));
-  if(r.club) r.club.forEach(p=>{ LG.poiClub.addLayer(L.circleMarker([p.lat,p.lon],{radius:8,color:'#fff',weight:2,fillColor:'#e67e22',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')));
+  if(r.club) r.club.forEach(p=>{ LG.poiClub.addLayer(L.circleMarker([p.lat,p.lon],{radius:8,color:'#111',weight:3,fillColor:'#e67e22',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')));
     LG.poiClub.addLayer(L.circle([p.lat,p.lon],{radius:s.rClub*1609.344,color:'#e67e22',weight:1,dashArray:'4 4',fill:false,interactive:false})); });
-  if(r.hosp) r.hosp.forEach(p=>LG.poiHosp.addLayer(L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1.5,fillColor:'#c0392b',fillOpacity:1}).bindTooltip(p.name)));
-  if(r.groc) r.groc.forEach(p=>LG.poiGroc.addLayer(L.circleMarker([p.lat,p.lon],{radius:3,color:'#2e7d32',weight:1,fillOpacity:.8}).bindTooltip(p.name)));
+  if(r.hosp) r.hosp.forEach(p=>LG.poiHosp.addLayer(L.circleMarker([p.lat,p.lon],{radius:7,color:'#111',weight:3,fillColor:'#c0392b',fillOpacity:1}).bindTooltip(p.name)));
+  if(r.groc) r.groc.forEach(p=>LG.poiGroc.addLayer(L.circleMarker([p.lat,p.lon],{radius:5,color:'#111',weight:2.5,fillColor:'#2e7d32',fillOpacity:1}).bindTooltip(p.name)));
   // boundary
   LG.bound.clearLayers();
   const bl = boundaryPoly ? boundaryPoly.map(p=>[p[1],p[0]]) : [[CFG.bounds.S,CFG.bounds.W],[CFG.bounds.S,CFG.bounds.E],[CFG.bounds.N,CFG.bounds.E],[CFG.bounds.N,CFG.bounds.W]];
@@ -637,7 +642,7 @@ $('btnKmlDraw').onclick = ()=>{ const fc=LG.draw.toGeoJSON(); download(`Naples_M
 
 /* ================= LISTINGS (local file only) ================= */
 const CLS_COLOR={A:'#1b9e3a',B:'#2563eb',S:'#8e44ad',C:'#6b7280'}, CLS_NAME={A:'Class A',B:'Class B',S:'Stretch',C:'Class C'};
-let LST=null;
+let LST=null; const LST_RENDERER = L.canvas({pane:'listingsPane', tolerance:4});
 const money = v => v==null?'—':'$'+Math.round(v).toLocaleString();
 function lstPopup(h){
   const lotTxt = h.lot? (h.lot>=43560? (h.lot/43560).toFixed(2)+' ac' : Math.round(h.lot).toLocaleString()+' sq ft') : 'not listed';
@@ -658,7 +663,7 @@ function renderListings(){
     if(!on.has(h.cls) || (ex && h.exit!==ex)) continue;
     if(gOnly && h.cls!=='C' && !/car|yes/.test(h.garage||'')) continue;
     n++; cnt[h.cls]++;
-    LG.listings.addLayer(L.circleMarker([h.lat,h.lon],{radius:h.cls==='C'?5:7,color:'#fff',weight:1.5,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
+    LG.listings.addLayer(L.circleMarker([h.lat,h.lon],{pane:'listingsPane',renderer:LST_RENDERER,radius:h.cls==='C'?6:8,color:'#fff',weight:2,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
   }
   $('lstInfo').innerHTML = `${esc(LST.name||'listings')} · pulled ${esc(LST.generated||'?')} · showing ${n}: A ${cnt.A}, B ${cnt.B}, Stretch ${cnt.S}, C ${cnt.C}`;
 }
