@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r2</title>
+<title>Naples Home Search Map r3</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -47,7 +47,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r2</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r3</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -64,6 +64,8 @@
   <div class="row"><label>US-41 counts south of latitude</label><input type="number" id="us41Lat" value="26.17" step="0.01"></div>
   <div class="row"><label><input type="checkbox" id="dropAlley" checked> Ignore I-75 east of Collier Blvd (Alligator Alley)</label></div>
   <div class="row"><label><input type="checkbox" id="genHosp" checked> General hospitals only (skip rehab/behavioral/specialty)</label></div>
+  <div class="row"><label><input type="checkbox" id="clubPlanned"> Count Costco sites not open yet (south Naples "Coming 2026", Fort Myers construction)</label></div>
+  <div class="row"><label><input type="checkbox" id="bjs"> Count BJ's Wholesale Club as a warehouse club</label></div>
   <div class="row"><label><input type="checkbox" id="flood02"> Also avoid FEMA 0.2% (moderate risk, "shaded X") zones</label></div>
   <div class="row"><label>Evacuation zones allowed</label>
     <select id="evacAllow">
@@ -119,7 +121,7 @@
 const CFG = {
   bounds: {S:25.88, W:-82.12, N:26.80, E:-81.36},   // outer region from Brian's screenshot
   stepDeg: 0.0015,                                    // grid cell ~150 m
-  overpass: ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'],
+  overpass: ['https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'],
   fema: ['https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer','https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer'],
   femaLayer: 28,
   evacFDEM: [
@@ -243,7 +245,13 @@ async function overpass(q){
 }
 const bbStr = b => `${b.S},${b.W},${b.N},${b.E}`;
 
-async function loadRoads(){
+async function bundled(name){ const r=await fetch(name,{cache:'no-cache'}); if(!r.ok) throw new Error(name+' HTTP '+r.status); return r.json(); }
+async function loadRoads(live){
+  if(!live){ try{ const j=await bundled('roads.json'); if(j.i75&&j.i75.length) return {i75:j.i75, us41:j.us41, src:'snapshot '+j.snapshot}; }catch(e){} }
+  try{ const d=await loadRoadsLive(); d.src='live OpenStreetMap'; return d; }
+  catch(e){ if(live){ const j=await bundled('roads.json'); return {i75:j.i75, us41:j.us41, src:'snapshot '+j.snapshot+' (live failed)'}; } throw e; }
+}
+async function loadRoadsLive(){
   const bb = bbStr(expand(CFG.bounds,0.25));
   const q = `[out:json][timeout:180];(way["highway"~"^(motorway|trunk|primary)$"]["ref"~"(I 75|US 41)"](${bb}););out geom;`;
   const j = await overpass(q); const i75=[], us41=[];
@@ -253,21 +261,28 @@ async function loadRoads(){
   if(!i75.length) throw new Error('no I-75 segments returned');
   return {i75, us41};
 }
-async function loadPOIs(){
-  const bb = bbStr(expand(CFG.bounds,0.4));
-  const q = `[out:json][timeout:180];(nwr["shop"="supermarket"](${bb});nwr["amenity"="hospital"](${bb});nwr["shop"="wholesale"](${bb});nwr["name"~"Costco|Sam's Club",i](${bb}););out center tags;`;
-  const j = await overpass(q); const grocery=[], hospital=[], club=[];
-  for(const el of j.elements||[]){ const t=el.tags||{}; const lat=el.lat??el.center?.lat, lon=el.lon??el.center?.lon; if(lat==null) continue;
+function classifyPOIs(elements){
+  const grocery=[], hospital=[], club=[], clubPlanned=[], bjs=[];
+  for(const el of elements||[]){ const t=el.tags||{}; const lat=el.lat??el.center?.lat, lon=el.lon??el.center?.lon; if(lat==null) continue;
     const p={lat:+lat.toFixed(5), lon:+lon.toFixed(5), name:t.name||t.brand||'(unnamed)', city:t['addr:city']||''};
     const nm=(t.name||'')+' '+(t.brand||'');
-    if(/costco|sam'?s club/i.test(nm) && t.amenity!=='fuel' && !/gas|fuel|tire|pharmacy|optical/i.test(t.name||'')) { club.push(p); continue; }
+    if(/costco/i.test(nm) && (/coming|construction|planned|future/i.test(nm) || t.landuse==='construction' || t.construction)) { p.name+=' (not open yet)'; clubPlanned.push(p); continue; }
+    if(t.shop==='wholesale' && /^(costco|sam'?s club)$/i.test((t.brand||t.name||'').trim())) { club.push(p); continue; }
+    if(t.shop==='wholesale' && /bj'?s wholesale/i.test(nm)) { bjs.push(p); continue; }
     if(t.shop==='supermarket') grocery.push(p);
     else if(t.amenity==='hospital') hospital.push(p);
   }
-  // dedupe clubs within 0.5 mi (building + node)
-  const ded=[]; for(const c of club){ if(!ded.some(d=>hav(d.lat,d.lon,c.lat,c.lon)<0.5)) ded.push(c); }
+  const dedupe = list => { const out=[]; for(const c of list){ if(!out.some(d=>hav(d.lat,d.lon,c.lat,c.lon)<0.5)) out.push(c); } return out; };
   if(!grocery.length) throw new Error('no stores returned');
-  return {grocery, hospital, club:ded};
+  return {grocery, hospital, club:dedupe(club), clubPlanned:dedupe(clubPlanned), bjs:dedupe(bjs)};
+}
+async function loadPOIs(live){
+  if(!live){ try{ const j=await bundled('pois.json'); const d=classifyPOIs(j.elements); d.src='snapshot '+j.snapshot; return d; }catch(e){} }
+  try{
+    const bb = bbStr(expand(CFG.bounds,0.4));
+    const q = `[out:json][timeout:180];(nwr["shop"="supermarket"](${bb});nwr["amenity"="hospital"](${bb});nwr["shop"="wholesale"](${bb});nwr["name"~"Costco|Sam's Club",i](${bb}););out center tags;`;
+    const d = classifyPOIs((await overpass(q)).elements); d.src='live OpenStreetMap'; return d;
+  }catch(e){ if(live){ const j=await bundled('pois.json'); const d=classifyPOIs(j.elements); d.src='snapshot '+j.snapshot+' (live failed)'; return d; } throw e; }
 }
 
 async function agsJSON(url, params){
@@ -403,8 +418,8 @@ if(map.pm){
 function settings(){ return {
   rCorr:+$('rCorr').value||15, rGroc:+$('rGroc').value||10, rHosp:+$('rHosp').value||15, rClub:+$('rClub').value||20,
   us41Lat:+$('us41Lat').value||26.17, dropAlley:$('dropAlley').checked, genHosp:$('genHosp').checked,
-  flood02:$('flood02').checked, evacAllow:+$('evacAllow').value }; }
-const NON_GENERAL = /rehab|behavioral|psychiatr|hospice|specialty|kindred|select |ltac|long[- ]term|surgery|surgical|veterinar|animal|mental|encompass|nursing/i;
+  flood02:$('flood02').checked, evacAllow:+$('evacAllow').value, clubPlanned:$('clubPlanned').checked, bjs:$('bjs').checked }; }
+const NON_GENERAL = /rehab|behavioral|psychiatr|hospice|specialty|kindred|select |ltac|long[- ]term|surgery|surgical|veterinar|animal|mental|encompass|nursing|willough|park royal|david lawrence|children|\bVA\b|veterans|emergency|freestanding/i;
 
 function clipLines(lines, keep){ // split lines to segments where keep(lat,lon)
   const out=[]; for(const ln of lines){ let cur=[]; for(const p of ln){ if(keep(p[0],p[1])) cur.push(p); else { if(cur.length>1) out.push(cur); cur=[]; } } if(cur.length>1) out.push(cur); } return out; }
@@ -416,7 +431,7 @@ function derived(s){
     r.us41 = clipLines(D.roads.us41, (lat)=>lat < s.us41Lat);
     r.corrLines = r.i75.concat(r.us41);
   }
-  if(D.pois){ r.groc=D.pois.grocery; r.club=D.pois.club;
+  if(D.pois){ r.groc=D.pois.grocery; r.club=D.pois.club.concat(s.clubPlanned?D.pois.clubPlanned||[]:[], s.bjs?D.pois.bjs||[]:[]);
     r.hosp = s.genHosp ? D.pois.hospital.filter(h=>!NON_GENERAL.test(h.name)) : D.pois.hospital; }
   if(D.flood){ r.floodBad = D.flood.filter(f=>f.sfha || (s.flood02 && /0\.2/.test(f.sub))); }
   if(D.evac){
@@ -584,14 +599,14 @@ $('btnKmlDraw').onclick = ()=>{ const fc=LG.draw.toGeoJSON(); download(`Naples_M
 async function loadAll(force){
   $('btnRun').disabled=true; $('btnRefresh').disabled=true;
   const jobs = [
-    ['roads', ()=>loadRoads(), d=>`${d.i75.length} I-75 / ${d.us41.length} US-41 segments`],
-    ['pois',  ()=>loadPOIs(),  d=>`${d.grocery.length} groceries, ${d.hospital.length} hospitals, ${d.club.length} clubs`],
+    ['roads', ()=>loadRoads(force), d=>`${d.i75.length} I-75 / ${d.us41.length} US-41 segments · ${d.src}`],
+    ['pois',  ()=>loadPOIs(force),  d=>`${d.grocery.length} groceries, ${d.hospital.length} hospitals, ${d.club.length} Costco/Sam's · ${d.src}`],
     ['flood', ()=>loadFlood(), d=>`${d.length} zones`],
     ['evac',  ()=>loadEvac(),  d=>`${d.feats.length} zones (${d.source})`]
   ];
   await Promise.all(jobs.map(async ([k,fn,desc])=>{
     setStatus(k,'load','loading…');
-    try{ const res = await cached('v2-'+k, fn, force); D[k]=res.data;
+    try{ const res = await cached((k==='roads'||k==='pois'?'v3-':'v2-')+k, fn, force); D[k]=res.data;
       setStatus(k, (k==='evac'&&res.data.partial)?'warn':'ok', `${desc(res.data)} · ${res.cached?ageTxt(res.t):'downloaded'}`); }
     catch(e){ D[k]=null; setStatus(k,'bad', e.message||String(e)); }
   }));
