@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r3</title>
+<title>Naples Home Search Map r5</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -47,7 +47,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r3</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r5</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -58,20 +58,23 @@
 
   <h2>Conditions</h2>
   <div class="row"><label>Max miles from highway corridor<br><span class="note">I-75, then US-41 after I-75 turns east</span></label><input type="number" id="rCorr" value="15" min="1" step="1"></div>
-  <div class="row"><label>Max miles from a grocery store</label><input type="number" id="rGroc" value="10" min="1" step="1"></div>
+  <div class="row"><label>Max miles from a grocery store<br><span class="note">Walmart, Publix or Winn-Dixie</span></label><input type="number" id="rGroc" value="10" min="1" step="1"></div>
+  <div class="row"><label>Max miles from a Walmart (delivery)</label><input type="number" id="rWal" value="15" min="1" step="1"></div>
   <div class="row"><label>Max miles from a hospital</label><input type="number" id="rHosp" value="15" min="1" step="1"></div>
   <div class="row"><label>Max miles from Costco / Sam's Club</label><input type="number" id="rClub" value="20" min="1" step="1"></div>
   <div class="row"><label>US-41 counts south of latitude</label><input type="number" id="us41Lat" value="26.17" step="0.01"></div>
   <div class="row"><label><input type="checkbox" id="dropAlley" checked> Ignore I-75 east of Collier Blvd (Alligator Alley)</label></div>
   <div class="row"><label><input type="checkbox" id="genHosp" checked> General hospitals only (skip rehab/behavioral/specialty)</label></div>
+  <div class="row"><label><input type="checkbox" id="anyGroc"> Count any supermarket as a grocery (not just Walmart / Publix / Winn-Dixie)</label></div>
+  <div class="row"><label><input type="checkbox" id="useAmz"> Require an Amazon delivery station within</label><input type="number" id="rAmz" value="20" min="1" step="1"></div>
   <div class="row"><label><input type="checkbox" id="clubPlanned"> Count Costco sites not open yet (south Naples "Coming 2026", Fort Myers construction)</label></div>
   <div class="row"><label><input type="checkbox" id="bjs"> Count BJ's Wholesale Club as a warehouse club</label></div>
   <div class="row"><label><input type="checkbox" id="flood02"> Also avoid FEMA 0.2% (moderate risk, "shaded X") zones</label></div>
   <div class="row"><label>Evacuation zones allowed</label>
     <select id="evacAllow">
       <option value="0">None (avoid every zone)</option>
-      <option value="1" selected>Least-likely zone only (Collier F, Lee E)</option>
-      <option value="2">Two least-likely (Collier E-F, Lee D-E)</option>
+      <option value="1">Least-likely zone only (Collier F, Lee/Sarasota/Charlotte E)</option>
+      <option value="2" selected>Two least-likely (Collier E-F, others D-E)</option>
     </select></div>
   <div class="btns"><button class="primary" id="btnRun">Recalculate</button></div>
 
@@ -108,7 +111,7 @@
 
   <h2>About the data</h2>
   <div class="note">
-    Highways, grocery stores, hospitals, Costco and Sam's Club come from OpenStreetMap. Flood zones are FEMA's National Flood Hazard Layer, where high risk means a Special Flood Hazard Area (A, AE, AH, AO or VE). Evacuation zones come from the Florida Division of Emergency Management's "Know Your Zone" map, with Lee County's own map as a backup.
+    Highways, grocery stores, hospitals, Walmart, Costco, Sam's Club and Amazon sites come from OpenStreetMap. Amazon doesn't publish delivery areas; the Amazon layer shows its delivery stations and lockers as a stand-in — confirm a ZIP code on Amazon itself. Flood zones are FEMA's National Flood Hazard Layer, where high risk means a Special Flood Hazard Area (A, AE, AH, AO or VE). Evacuation zones come from the Florida Division of Emergency Management's "Know Your Zone" map, with Lee County's own map as a backup.
     Distances are straight-line, not driving distance, and the grid resolution is about 150 m. Before you buy, confirm a specific property on the county's evacuation-zone lookup and FEMA's flood map.
   </div>
 </div>
@@ -119,7 +122,7 @@
 "use strict";
 /* ================= CONFIG ================= */
 const CFG = {
-  bounds: {S:25.88, W:-82.12, N:26.80, E:-81.36},   // outer region from Brian's screenshot
+  bounds: {S:25.88, W:-82.52, N:27.22, E:-81.36},   // Brian's outer region, extended north to cover all of North Port and Venice
   stepDeg: 0.0015,                                    // grid cell ~150 m
   overpass: ['https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'],
   fema: ['https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer','https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer'],
@@ -133,7 +136,7 @@ const CFG = {
   evacLee: 'https://services2.arcgis.com/LvWGAAhHwbCJ2GMP/ArcGIS/rest/services/Aware_Layers/FeatureServer/1',
   alleyLon: -81.685,
   // Open Gulf water (lon,lat), traced along the shoreline. Only removes open water: the shoreline strip is already excluded by flood zones and evacuation Zone A.
-  gulf: [[-82.3,26.43],[-82.13,26.445],[-82.03,26.44],[-81.965,26.46],[-81.875,26.38],[-81.865,26.36],[-81.853,26.33],[-81.837,26.3],[-81.823,26.25],[-81.815,26.21],[-81.808,26.13],[-81.793,26.09],[-81.77,26.0],[-81.745,25.97],[-81.73,25.94],[-81.7,25.89],[-81.7,25.8],[-82.3,25.8]],
+  gulf: [[-82.8,27.3],[-82.505,27.3],[-82.49,27.22],[-82.47,27.15],[-82.45,27.1],[-82.43,27.05],[-82.385,26.98],[-82.35,26.93],[-82.28,26.83],[-82.255,26.75],[-82.24,26.68],[-82.215,26.6],[-82.18,26.53],[-82.165,26.475],[-82.13,26.445],[-82.03,26.44],[-81.965,26.46],[-81.875,26.38],[-81.865,26.36],[-81.853,26.33],[-81.837,26.3],[-81.823,26.25],[-81.815,26.21],[-81.808,26.13],[-81.793,26.09],[-81.77,26.0],[-81.745,25.97],[-81.73,25.94],[-81.7,25.89],[-81.7,25.8],[-81.7,25.8],[-82.8,25.8]],
   cacheDays: 30
 };
 const $ = id => document.getElementById(id);
@@ -262,25 +265,37 @@ async function loadRoadsLive(){
   return {i75, us41};
 }
 function classifyPOIs(elements){
-  const grocery=[], hospital=[], club=[], clubPlanned=[], bjs=[];
+  const grocery=[], groceryAny=[], walmart=[], hospital=[], club=[], clubPlanned=[], bjs=[], amazon=[], amzLocker=[];
   for(const el of elements||[]){ const t=el.tags||{}; const lat=el.lat??el.center?.lat, lon=el.lon??el.center?.lon; if(lat==null) continue;
     const p={lat:+lat.toFixed(5), lon:+lon.toFixed(5), name:t.name||t.brand||'(unnamed)', city:t['addr:city']||''};
     const nm=(t.name||'')+' '+(t.brand||'');
+    const anm = nm+' '+(t.operator||'');
+    if(/amazon/i.test(anm)){
+      if(t.amenity==='parcel_locker'){ p.name='Amazon Hub Locker'; amzLocker.push(p); continue; }
+      if(/delivery station|fulfil|sortation|logistics/i.test(t.name||'') || t.amenity==='post_depot' || (/amazon/i.test((t.operator||'')+(t.brand||'')) && /industrial|warehouse/.test(t.building||''))){
+        if(t.landuse==='construction' || /construction/i.test(t.name||'')) p.name+=' (under construction)';
+        if(p.name==='(unnamed)'||p.name==='Amazon') p.name='Amazon facility'; amazon.push(p); continue; }
+      continue;
+    }
+    if(/walmart/i.test(nm)){
+      if((t.shop==='supermarket'||t.shop==='department_store'||(!t.shop&&!t.amenity&&/supercenter|neighborhood market/i.test(t.name||''))) && !/fuel|gas|pharmacy|garden|plaza|distribution|auto|vision|spirits|convenience/i.test(t.name||'')){ walmart.push(p); grocery.push(p); groceryAny.push(p); }
+      continue;
+    }
     if(/costco/i.test(nm) && (/coming|construction|planned|future/i.test(nm) || t.landuse==='construction' || t.construction)) { p.name+=' (not open yet)'; clubPlanned.push(p); continue; }
     if(t.shop==='wholesale' && /^(costco|sam'?s club)$/i.test((t.brand||t.name||'').trim())) { club.push(p); continue; }
     if(t.shop==='wholesale' && /bj'?s wholesale/i.test(nm)) { bjs.push(p); continue; }
-    if(t.shop==='supermarket') grocery.push(p);
+    if(t.shop==='supermarket'){ groceryAny.push(p); if(/publix|winn[- ]?dixie/i.test(nm)) grocery.push(p); }
     else if(t.amenity==='hospital') hospital.push(p);
   }
   const dedupe = list => { const out=[]; for(const c of list){ if(!out.some(d=>hav(d.lat,d.lon,c.lat,c.lon)<0.5)) out.push(c); } return out; };
   if(!grocery.length) throw new Error('no stores returned');
-  return {grocery, hospital, club:dedupe(club), clubPlanned:dedupe(clubPlanned), bjs:dedupe(bjs)};
+  return {grocery:dedupe(grocery), groceryAny, walmart:dedupe(walmart), hospital, club:dedupe(club), clubPlanned:dedupe(clubPlanned), bjs:dedupe(bjs), amazon:dedupe(amazon), amzLocker};
 }
 async function loadPOIs(live){
   if(!live){ try{ const j=await bundled('pois.json'); const d=classifyPOIs(j.elements); d.src='snapshot '+j.snapshot; return d; }catch(e){} }
   try{
     const bb = bbStr(expand(CFG.bounds,0.4));
-    const q = `[out:json][timeout:180];(nwr["shop"="supermarket"](${bb});nwr["amenity"="hospital"](${bb});nwr["shop"="wholesale"](${bb});nwr["name"~"Costco|Sam's Club",i](${bb}););out center tags;`;
+    const q = `[out:json][timeout:180];(nwr["shop"="supermarket"](${bb});nwr["amenity"="hospital"](${bb});nwr["shop"="wholesale"](${bb});nwr["name"~"Costco|Sam's Club",i](${bb});nwr["brand"~"Walmart"](${bb});nwr["name"~"Walmart"](${bb});nwr["name"~"Amazon",i](${bb});nwr["operator"~"Amazon",i](${bb});nwr["brand"~"Amazon",i](${bb}););out center tags;`;
     const d = classifyPOIs((await overpass(q)).elements); d.src='live OpenStreetMap'; return d;
   }catch(e){ if(live){ const j=await bundled('pois.json'); const d=classifyPOIs(j.elements); d.src='snapshot '+j.snapshot+' (live failed)'; return d; } throw e; }
 }
@@ -393,7 +408,9 @@ const LAYERS = [
   {k:'roads',   label:'I-75 / US-41 lines used', color:'#1d2327', on:true},
   {k:'poiClub', label:'Costco / Sam\'s Club stores', color:'#e67e22', on:true},
   {k:'poiHosp', label:'Hospitals', color:'#c0392b', on:true},
-  {k:'poiGroc', label:'Grocery stores', color:'#2e7d32', on:false},
+  {k:'poiGroc', label:'Grocery stores (Walmart/Publix/Winn-Dixie)', color:'#2e7d32', on:false},
+  {k:'poiWal',  label:'Walmart stores', color:'#0071ce', on:true},
+  {k:'poiAmz',  label:'Amazon delivery stations & lockers', color:'#ff9900', on:true},
   {k:'bound',   label:'Search boundary', color:'#555', on:true},
   {k:'femaLive',label:'FEMA live map (zoom in to see)', color:'#7fb3ff', on:false},
   {k:'draw',    label:'My drawings', color:'#3388ff', on:true}
@@ -418,8 +435,8 @@ if(map.pm){
 function settings(){ return {
   rCorr:+$('rCorr').value||15, rGroc:+$('rGroc').value||10, rHosp:+$('rHosp').value||15, rClub:+$('rClub').value||20,
   us41Lat:+$('us41Lat').value||26.17, dropAlley:$('dropAlley').checked, genHosp:$('genHosp').checked,
-  flood02:$('flood02').checked, evacAllow:+$('evacAllow').value, clubPlanned:$('clubPlanned').checked, bjs:$('bjs').checked }; }
-const NON_GENERAL = /rehab|behavioral|psychiatr|hospice|specialty|kindred|select |ltac|long[- ]term|surgery|surgical|veterinar|animal|mental|encompass|nursing|willough|park royal|david lawrence|children|\bVA\b|veterans|emergency|freestanding/i;
+  flood02:$('flood02').checked, evacAllow:+$('evacAllow').value, clubPlanned:$('clubPlanned').checked, bjs:$('bjs').checked, rWal:+$('rWal').value||15, anyGroc:$('anyGroc').checked, useAmz:$('useAmz').checked, rAmz:+$('rAmz').value||20 }; }
+const NON_GENERAL = /rehab|behavioral|psychiatr|hospice|specialty|kindred|select |ltac|long[- ]term|surgery|surgical|veterinar|animal|mental|encompass|nursing|addiction|willough|park royal|david lawrence|children|\bVA\b|veterans|emergency|freestanding/i;
 
 function clipLines(lines, keep){ // split lines to segments where keep(lat,lon)
   const out=[]; for(const ln of lines){ let cur=[]; for(const p of ln){ if(keep(p[0],p[1])) cur.push(p); else { if(cur.length>1) out.push(cur); cur=[]; } } if(cur.length>1) out.push(cur); } return out; }
@@ -431,7 +448,7 @@ function derived(s){
     r.us41 = clipLines(D.roads.us41, (lat)=>lat < s.us41Lat);
     r.corrLines = r.i75.concat(r.us41);
   }
-  if(D.pois){ r.groc=D.pois.grocery; r.club=D.pois.club.concat(s.clubPlanned?D.pois.clubPlanned||[]:[], s.bjs?D.pois.bjs||[]:[]);
+  if(D.pois){ r.groc=s.anyGroc?D.pois.groceryAny:D.pois.grocery; r.wal=D.pois.walmart||[]; r.amz=D.pois.amazon||[]; r.club=D.pois.club.concat(s.clubPlanned?D.pois.clubPlanned||[]:[], s.bjs?D.pois.bjs||[]:[]);
     r.hosp = s.genHosp ? D.pois.hospital.filter(h=>!NON_GENERAL.test(h.name)) : D.pois.hospital; }
   if(D.flood){ r.floodBad = D.flood.filter(f=>f.sfha || (s.flood02 && /0\.2/.test(f.sub))); }
   if(D.evac){
@@ -450,6 +467,8 @@ function compute(){
   const crit = [];  // {key,label,pass:Uint8Array}
   if(r.corrLines) crit.push({key:'corr', label:`Within ${s.rCorr} mi of I-75 / US-41`, pass:maskLines(r.corrLines, s.rCorr)});
   if(r.groc) crit.push({key:'groc', label:`Within ${s.rGroc} mi of a grocery`, pass:maskCircles(r.groc, s.rGroc)});
+  if(r.wal) crit.push({key:'wal', label:`Within ${s.rWal} mi of a Walmart`, pass:maskCircles(r.wal, s.rWal)});
+  if(r.amz && s.useAmz) crit.push({key:'amz', label:`Within ${s.rAmz} mi of an Amazon delivery station`, pass:maskCircles(r.amz.filter(a=>!/construction/.test(a.name)), s.rAmz)});
   if(r.hosp) crit.push({key:'hosp', label:`Within ${s.rHosp} mi of a hospital`, pass:maskCircles(r.hosp, s.rHosp)});
   if(r.club) crit.push({key:'club', label:`Within ${s.rClub} mi of Costco/Sam's`, pass:maskCircles(r.club, s.rClub)});
   if(r.floodBad){ const m=maskPolys(r.floodBad); for(let i=0;i<n;i++) m[i]=1-m[i]; crit.push({key:'flood', label: s.flood02?'Outside FEMA flood zones (incl. 0.2%)':'Outside FEMA high-risk flood zones', pass:m}); }
@@ -458,9 +477,9 @@ function compute(){
   let inB;
   if(boundaryPoly){ inB = maskPolys([{rings:[boundaryPoly]}]); } else { inB = new Uint8Array(n).fill(1); }
   { const wm = maskPolys([{rings:[CFG.gulf]}]); for(let i=0;i<n;i++) if(wm[i]) inB[i]=0; }
-  // Coast-side water: west of lon -81.80 every mapped piece of land is inside some evacuation zone, so "no zone at all" there = bays/Gulf.
-  if(D.evac){ const anyZ = maskPolys(D.evac.feats); const xCut = toPx(-81.80, 26.3)[0];
-    for(let y=0;y<G.h;y++) for(let x=0;x<G.w && x<xCut;x++){ const i=y*G.w+x; if(!anyZ[i]) inB[i]=0; } }
+  // Coast-side water: west of lon -81.80 and south of 26.55 (Lee/Collier coast) every mapped piece of land is inside some evacuation zone, so "no zone at all" there = bays/Gulf.
+  if(D.evac){ const anyZ = maskPolys(D.evac.feats); const xCut = toPx(-81.80, 26.3)[0], yTop = Math.max(0, Math.floor(toPx(-81.8, 26.55)[1]));
+    for(let y=yTop;y<G.h;y++) for(let x=0;x<G.w && x<xCut;x++){ const i=y*G.w+x; if(!anyZ[i]) inB[i]=0; } }
   const sweet=new Uint8Array(n), near=new Uint8Array(n), fails=new Uint8Array(n);
   for(let i=0;i<n;i++){ if(!inB[i]) continue; let f=0; for(const c of crit) if(!c.pass[i]) f++; fails[i]=f; if(f===0) sweet[i]=1; else if(f===1) near[i]=1; }
   // areas
@@ -507,7 +526,10 @@ function render(){
   if(r.i75){ r.i75.forEach(l=>LG.roads.addLayer(L.polyline(l,{color:'#1f5f8b',weight:4,opacity:.9}).bindTooltip('I-75 (counted)')));
     r.us41.forEach(l=>LG.roads.addLayer(L.polyline(l,{color:'#c0392b',weight:4,opacity:.9}).bindTooltip('US-41 (counted)'))); }
   // POIs
-  LG.poiClub.clearLayers(); LG.poiHosp.clearLayers(); LG.poiGroc.clearLayers();
+  LG.poiClub.clearLayers(); LG.poiHosp.clearLayers(); LG.poiGroc.clearLayers(); LG.poiWal.clearLayers(); LG.poiAmz.clearLayers();
+  if(r.wal) r.wal.forEach(p=>LG.poiWal.addLayer(L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1.5,fillColor:'#0071ce',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:''))));
+  if(D.pois&&D.pois.amazon) D.pois.amazon.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{radius:9,color:'#232f3e',weight:2,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:''))));
+  if(D.pois&&D.pois.amzLocker) D.pois.amzLocker.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{radius:4,color:'#232f3e',weight:1,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name)));
   if(r.club) r.club.forEach(p=>{ LG.poiClub.addLayer(L.circleMarker([p.lat,p.lon],{radius:8,color:'#fff',weight:2,fillColor:'#e67e22',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')));
     LG.poiClub.addLayer(L.circle([p.lat,p.lon],{radius:s.rClub*1609.344,color:'#e67e22',weight:1,dashArray:'4 4',fill:false,interactive:false})); });
   if(r.hosp) r.hosp.forEach(p=>LG.poiHosp.addLayer(L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1.5,fillColor:'#c0392b',fillOpacity:1}).bindTooltip(p.name)));
@@ -523,7 +545,7 @@ function render(){
      <table class="res">${crit.map((c,i)=>`<tr><td>${c.label}</td><td>${(100*LAST.aC[i]/LAST.aB).toFixed(0)}% pass</td></tr>`).join('')}</table>
      ${missing.length?`<div class="bad" style="margin-top:6px">Not applied (data failed to load): ${missing.map(k=>STATUS_ITEMS[k]).join(', ')}</div>`:''}
      ${D.evac&&D.evac.partial?'<div class="warn">Evacuation zones: only Lee County loaded (the statewide map failed). Collier evacuation zones are NOT applied.</div>':''}
-     <div class="note" style="margin-top:4px">Counts in view: ${r.groc?r.groc.length:0} groceries, ${r.hosp?r.hosp.length:0} hospitals, ${r.club?r.club.length:0} Costco/Sam's stores.</div>`;
+     <div class="note" style="margin-top:4px">Counts in view: ${r.groc?r.groc.length:0} groceries, ${r.wal?r.wal.length:0} Walmarts, ${r.amz?r.amz.length:0} Amazon sites, ${r.hosp?r.hosp.length:0} hospitals, ${r.club?r.club.length:0} Costco/Sam's stores.</div>`;
 }
 
 /* ================= POINT CHECK ================= */
@@ -533,14 +555,15 @@ function evaluatePoint(lat, lon){
   const yes = ok => ok ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>';
   const nearest = list => { let b=null; for(const p of list){ const d=hav(lat,lon,p.lat,p.lon); if(!b||d<b.d) b={d,p}; } return b; };
   if(r.corrLines){ const d=distToLines(lat,lon,r.corrLines); rows.push([yes(d<=s.rCorr),'Highway corridor',`${d.toFixed(1)} mi to I-75/US-41`]); }
-  for(const [k,label,lim] of [['groc','Grocery',s.rGroc],['hosp','Hospital',s.rHosp],['club','Costco/Sam\'s',s.rClub]]){
+  if(r.amz && r.amz.length){ const n=nearest(r.amz.filter(a=>!/construction/.test(a.name))); if(n) rows.push([s.useAmz?yes(n.d<=s.rAmz):'<span class="note">info</span>','Amazon station',`${n.d.toFixed(1)} mi — ${n.p.name}`]); }
+  for(const [k,label,lim] of [['groc','Grocery',s.rGroc],['wal','Walmart',s.rWal],['hosp','Hospital',s.rHosp],['club','Costco/Sam\'s',s.rClub]]){
     if(!r[k]) continue; const n=nearest(r[k]); if(n) rows.push([yes(n.d<=lim),label,`${n.d.toFixed(1)} mi — ${n.p.name}`]); }
   if(D.flood){ const hits=D.flood.filter(f=>pip(lon,lat,f)); const bad=hits.find(f=>f.sfha || (s.flood02&&/0\.2/.test(f.sub)));
     const z = hits.length ? hits.map(f=>f.zone+(/0\.2/.test(f.sub)?' (0.2%)':'')).join(', ') : 'X (minimal)';
     rows.push([yes(!bad),'FEMA flood zone', z]); }
   if(D.evac){ const hits=D.evac.feats.filter(f=>pip(lon,lat,f)); const bad=hits.find(f=>!f.allowed);
     rows.push([yes(!bad),'Evacuation zone', hits.length? hits.map(f=>`${f.county} ${f.letter}`).join(', ') : 'none']); }
-  const pass = rows.every(r=>r[0].includes('✓'));
+  const pass = rows.every(r=>r[0].includes('✓')||r[0].includes('info'));
   return `<b>${pass?'<span class="ok">PASSES every condition</span>':'<span class="bad">Does not pass</span>'}</b><br><span class="note">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>
     <table class="pop">${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table>
     <div class="note">Confirm on FEMA's flood map and the county's evacuation-zone lookup before you buy.</div>`;
@@ -603,13 +626,13 @@ async function loadAll(force){
   $('btnRun').disabled=true; $('btnRefresh').disabled=true;
   const jobs = [
     ['roads', ()=>loadRoads(force), d=>`${d.i75.length} I-75 / ${d.us41.length} US-41 segments · ${d.src}`],
-    ['pois',  ()=>loadPOIs(force),  d=>`${d.grocery.length} groceries, ${d.hospital.length} hospitals, ${d.club.length} Costco/Sam's · ${d.src}`],
+    ['pois',  ()=>loadPOIs(force),  d=>`${d.grocery.length} groceries (${d.walmart.length} Walmart), ${d.hospital.length} hospitals, ${d.club.length} Costco/Sam's · ${d.src}`],
     ['flood', ()=>loadFlood(), d=>`${d.length} zones`],
     ['evac',  ()=>loadEvac(),  d=>`${d.feats.length} zones (${d.source})`]
   ];
   await Promise.all(jobs.map(async ([k,fn,desc])=>{
     setStatus(k,'load','loading…');
-    try{ const res = await cached((k==='roads'||k==='pois'?'v3-':'v2-')+k, fn, force); D[k]=res.data;
+    try{ const res = await cached((k==='pois'?'v5-':'v4-')+k, fn, force); D[k]=res.data;  /* v4 = extended bounds */
       setStatus(k, (k==='evac'&&res.data.partial)?'warn':'ok', `${desc(res.data)} · ${res.cached?ageTxt(res.t):'downloaded'}`); }
     catch(e){ D[k]=null; setStatus(k,'bad', e.message||String(e)); }
   }));
