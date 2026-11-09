@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r10</title>
+<title>Naples Home Search Map r11</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -16,7 +16,25 @@
   html,body{margin:0;height:100%;font:13px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)}
   #app{display:flex;height:100%}
   #panel{width:360px;min-width:360px;overflow-y:auto;background:var(--bg);border-right:1px solid var(--line);padding:12px 14px 40px}
-  #map{flex:1}
+  #right{flex:1;display:flex;flex-direction:column;min-width:0}
+  #map{flex:1;min-height:200px}
+  #homes{height:42%;min-height:44px;border-top:2px solid #9aa3aa;background:#fff;display:flex;flex-direction:column;font-size:12.5px}
+  #homes.min{height:44px}
+  #homesBar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;background:#eef1f3;border-bottom:1px solid var(--line)}
+  #homesBar input[type=number]{width:72px}
+  #homesBar label{white-space:nowrap}
+  #homesBody{flex:1;overflow:auto}
+  table.ht{border-collapse:collapse;width:100%}
+  table.ht th{position:sticky;top:0;background:#f7f7f5;border-bottom:1px solid var(--line);text-align:left;padding:4px 6px;cursor:pointer;white-space:nowrap}
+  table.ht td{padding:3px 6px;border-bottom:1px solid #eee;white-space:nowrap}
+  table.ht tr.grp td{background:#1f5f8b;color:#fff;font-weight:600;cursor:pointer}
+  table.ht tr.row:hover td{background:#fff7d6}
+  table.ht tr.sel td{background:#e3f1ff}
+  .cdot{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #999;vertical-align:middle}
+  table.cmp{border-collapse:collapse}
+  table.cmp th,table.cmp td{border:1px solid var(--line);padding:4px 8px;vertical-align:top;white-space:nowrap}
+  table.cmp th{background:#f7f7f5;text-align:left}
+  .best{background:#e6f6ea;font-weight:600}
   h1{font-size:16px;margin:0 0 2px}
   h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:16px 0 6px;border-top:1px solid var(--line);padding-top:10px}
   .sub{color:var(--mute);font-size:12px}
@@ -47,7 +65,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r10</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r11</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -128,7 +146,28 @@
     Distances are straight-line, not driving distance, and the grid resolution is about 150 m. Before you buy, confirm a specific property on the county's evacuation-zone lookup and FEMA's flood map.
   </div>
 </div>
+<div id="right">
 <div id="map"><div id="busy"></div></div>
+<div id="homes">
+  <div id="homesBar">
+    <b>Homes</b> <span id="hCount" class="note"></span>
+    <button id="hList" class="primary">List</button><button id="hCompare">Compare (<span id="hSelN">0</span>)</button><button id="hClear">Clear picks</button>
+    <span class="note">|</span>
+    <label>Price $<input type="number" id="fPmin" placeholder="min" step="10000"></label><label>– $<input type="number" id="fPmax" placeholder="max" step="10000"></label>
+    <label>Beds ≥<input type="number" id="fBeds" min="0" step="1" style="width:48px"></label>
+    <label>Baths ≥<input type="number" id="fBaths" min="0" step="0.5" style="width:48px"></label>
+    <label>Sq ft ≥<input type="number" id="fSqft" step="100"></label>
+    <label>Lot ac ≥<input type="number" id="fLot" step="0.05" style="width:56px"></label>
+    <label>Built ≥<input type="number" id="fYear" step="1" style="width:60px"></label>
+    <label>Days on mkt ≤<input type="number" id="fDom" step="1" style="width:56px"></label>
+    <label><input type="checkbox" id="fGarage"> Garage confirmed</label>
+    <label><input type="checkbox" id="fNoFlag"> Hide "verify price"</label>
+    <label><input type="checkbox" id="fMapView"> Only homes in map view</label>
+    <button id="hMin" title="Shrink / grow this panel">▾</button>
+  </div>
+  <div id="homesBody"><div class="note" style="padding:10px">Load your listings file (left panel → Listings) to see homes here.</div></div>
+</div>
+</div>
 </div>
 
 <script>
@@ -653,18 +692,19 @@ function lstPopup(h){
    <tr><td>Year built</td><td>${h.year||'—'}</td></tr><tr><td>Garage</td><td>${esc(h.garage||'—')}</td></tr>
    <tr><td>I-75 exit</td><td>${esc(h.exit)} (${h.exitMi} mi)</td></tr><tr><td>Flood zone</td><td>${esc(h.flood||'—')}</td></tr><tr><td>Evacuation</td><td>${esc(h.evac||'—')}</td></tr>
    <tr><td>Days on market</td><td>${esc(h.dom||'—')}</td></tr></table>
-   <a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin ↗</a>`;
+   <a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin ↗</a> · <a href="#" onclick="SEL.has('${esc(h.url)}')?SEL.delete('${esc(h.url)}'):SEL.add('${esc(h.url)}');renderListings();return false;">Add / remove from Compare</a>`;
 }
 function renderListings(){
-  LG.listings.clearLayers(); if(!LST) return;
+  LG.listings.clearLayers(); for(const k in PIN) delete PIN[k]; if(!LST) return;
   const on=new Set([...document.querySelectorAll('#lstClasses input:checked')].map(i=>i.dataset.c));
   const ex=$('lstExit').value, gOnly=$('lstGarageOnly').checked; let n=0; const cnt={A:0,B:0,S:0,C:0};
   for(const h of LST.rows){
     if(!on.has(h.cls) || (ex && h.exit!==ex)) continue;
     if(gOnly && h.cls!=='C' && !/car|yes/.test(h.garage||'')) continue;
-    n++; cnt[h.cls]++;
-    LG.listings.addLayer(L.circleMarker([h.lat,h.lon],{pane:'listingsPane',renderer:LST_RENDERER,radius:h.cls==='C'?6:8,color:'#fff',weight:2,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
+    n++; cnt[h.cls]++; const picked = typeof SEL!=='undefined' && SEL.has(h.url);
+    LG.listings.addLayer(PIN[h.url]=L.circleMarker([h.lat,h.lon],{pane:'listingsPane',renderer:LST_RENDERER,radius:picked?11:(h.cls==='C'?6:8),color:picked?'#ffcc00':'#fff',weight:picked?4:2,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
   }
+  if(typeof renderHomes==='function') renderHomes();
   $('lstInfo').innerHTML = `${esc(LST.name||'listings')} · pulled ${esc(LST.generated||'?')} · showing ${n}: A ${cnt.A}, B ${cnt.B}, Stretch ${cnt.S}, C ${cnt.C}`;
 }
 function useListings(obj, save){
@@ -679,6 +719,80 @@ $('lstFile').addEventListener('change', async e=>{ const f=e.target.files[0]; if
 ['lstExit','lstGarageOnly'].forEach(id=>$(id).addEventListener('change',renderListings));
 $('lstClasses').addEventListener('change',renderListings);
 idb.get('listings').then(c=>{ if(c&&c.data) useListings(c.data,false); });
+
+/* ================= HOMES PANEL (list + compare) ================= */
+const SEL=new Set(); let HVIEW='list', HSORT={k:'price',dir:1}; const COLLAPSED=new Set(); const PIN={};
+const num = v => (v===''||v==null)?null:+v;
+const acres = h => h.lot? h.lot/43560 : null;
+const ppsf = h => (h.sqft&&h.price)? h.price/h.sqft : null;
+const garN = h => { const m=/(\d+)-car/.exec(h.garage||''); return m?+m[1]:(h.garage==='yes'?1:0); };
+const status = h => h.status || 'Active';
+function hFiltered(){
+  if(!LST) return [];
+  const on=new Set([...document.querySelectorAll('#lstClasses input:checked')].map(i=>i.dataset.c)), ex=$('lstExit').value;
+  const pmin=num($('fPmin').value), pmax=num($('fPmax').value), beds=num($('fBeds').value), baths=num($('fBaths').value), sq=num($('fSqft').value),
+        lot=num($('fLot').value), yr=num($('fYear').value), dom=num($('fDom').value), gar=$('fGarage').checked, nf=$('fNoFlag').checked, mv=$('fMapView').checked;
+  const b=map.getBounds();
+  return LST.rows.filter(h=> on.has(h.cls) && (!ex||h.exit===ex) && (pmin==null||h.price>=pmin) && (pmax==null||h.price<=pmax) && (beds==null||h.beds>=beds) && (baths==null||h.baths>=baths)
+    && (sq==null||(h.sqft||0)>=sq) && (lot==null||(acres(h)||0)>=lot) && (yr==null||(h.year||0)>=yr) && (dom==null||(+h.dom||0)<=dom)
+    && (!gar||/car|yes/.test(h.garage||'')||h.cls==='C'&&/car|yes/.test(h.garage||'')) && (!nf||!h.note) && (!mv||b.contains([h.lat,h.lon])));
+}
+const COLS=[['pick',''],['cls','Class'],['addr','Address'],['price','Price'],['ppsf','$/sq ft'],['beds','Beds'],['baths','Baths'],['sqft','Sq ft'],['lot','Lot (ac)'],['year','Built'],
+  ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['link','Redfin']];
+function sortVal(h,k){ return k==='ppsf'?ppsf(h): k==='lot'?acres(h): k==='garage'?garN(h): k==='dom'?+h.dom: k==='status'?status(h): k==='fee'?(h.feeNote||''): h[k]; }
+function hRow(h){ const id=h.url; const pc=ppsf(h), ac=acres(h);
+  return `<tr class="row${SEL.has(id)?' sel':''}" data-id="${esc(id)}"><td><input type="checkbox" class="pk" ${SEL.has(id)?'checked':''}></td>
+  <td><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${CLS_NAME[h.cls]}</td><td>${esc(h.addr)}, ${esc(h.city)}</td><td>${money(h.price)}</td><td>${pc?'$'+Math.round(pc):'—'}</td>
+  <td>${h.beds}</td><td>${h.baths}</td><td>${h.sqft?Math.round(h.sqft).toLocaleString():'—'}</td><td>${ac?ac.toFixed(2):'—'}</td><td>${h.year||'—'}</td><td>${esc(h.garage||'—')}</td><td>${esc(h.type)}</td>
+  <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
+function renderHomes(){
+  const rows=hFiltered(); $('hCount').textContent = LST? `${rows.length} of ${LST.rows.length} homes` : ''; $('hSelN').textContent=SEL.size;
+  $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare');
+  if(!LST){ return; }
+  if(HVIEW==='compare') return renderCompare();
+  const groups={}; rows.forEach(h=>(groups[h.exit]=groups[h.exit]||[]).push(h));
+  const keys=Object.keys(groups).sort((a,b)=>(parseInt(b.match(/\d+/))||0)-(parseInt(a.match(/\d+/))||0));
+  const k=HSORT.k, d=HSORT.dir;
+  const head='<tr>'+COLS.map(([c,l])=>`<th data-k="${c}">${l}${c===k?(d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  let body='';
+  for(const g of keys){ const list=groups[g].sort((a,b)=>{const x=sortVal(a,k),y=sortVal(b,k); return (x>y?1:x<y?-1:0)*d;});
+    const c={A:0,B:0,S:0,C:0}; list.forEach(h=>c[h.cls]++);
+    body+=`<tr class="grp" data-g="${esc(g)}"><td colspan="${COLS.length}">${COLLAPSED.has(g)?'▸':'▾'} ${esc(g)} — ${list.length} homes (A ${c.A} · B ${c.B} · Stretch ${c.S} · C ${c.C})</td></tr>`;
+    if(!COLLAPSED.has(g)) body+=list.map(hRow).join(''); }
+  $('homesBody').innerHTML = rows.length? `<table class="ht">${head}${body}</table>` : '<div class="note" style="padding:10px">No homes match these filters.</div>';
+}
+function renderCompare(){
+  const hs=LST.rows.filter(h=>SEL.has(h.url));
+  if(!hs.length){ $('homesBody').innerHTML='<div class="note" style="padding:10px">Tick homes in the List view, then click Compare.</div>'; return; }
+  const spec=[['Class',h=>CLS_NAME[h.cls],null],['Price',h=>money(h.price),h=>-h.price],['$/sq ft',h=>ppsf(h)?'$'+Math.round(ppsf(h)):'—',h=>-(ppsf(h)||1e9)],
+   ['Beds',h=>h.beds,h=>h.beds],['Baths',h=>h.baths,h=>h.baths],['Sq ft',h=>h.sqft?Math.round(h.sqft).toLocaleString():'—',h=>h.sqft||0],
+   ['Lot',h=>acres(h)?acres(h).toFixed(2)+' ac':'—',h=>acres(h)||0],['Year built',h=>h.year||'—',h=>h.year||0],['Garage',h=>h.garage||'—',h=>garN(h)],
+   ['Type',h=>h.type,null],['HOA / fee / notes',h=>h.feeNote||'none',null],['Flood zone',h=>h.flood||'—',null],['Evacuation zone',h=>h.evac||'—',null],
+   ['Days on market',h=>h.dom||'—',null],['I-75 section',h=>h.exit,null],['Miles to exit',h=>h.exitMi,h=>-h.exitMi],['Status',h=>status(h),null],
+   ['Links',h=>`<a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Redfin ↗</a> · <a href="#" class="zoom" data-id="${esc(h.url)}">Show on map</a> · <a href="#" class="unpick" data-id="${esc(h.url)}">Remove</a>`,null]];
+  let t='<table class="cmp"><tr><th></th>'+hs.map(h=>`<th><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${esc(h.addr)}<br><span class="note">${esc(h.city)} ${esc(h.zip)}</span></th>`).join('')+'</tr>';
+  for(const [lab,f,score] of spec){ let best=null; if(score&&hs.length>1){ best=Math.max(...hs.map(score)); }
+    t+=`<tr><th>${lab}</th>`+hs.map(h=>`<td class="${best!=null&&score(h)===best?'best':''}">${f(h)}</td>`).join('')+'</tr>'; }
+  $('homesBody').innerHTML=t+'</table><div class="note" style="padding:6px">Green = best in that row.</div>';
+}
+function zoomTo(id){ const h=LST.rows.find(r=>r.url===id); if(!h) return; map.setView([h.lat,h.lon], Math.max(map.getZoom(),15));
+  const l=PIN[id]; if(l) setTimeout(()=>l.openPopup(),250); else L.popup({maxWidth:340}).setLatLng([h.lat,h.lon]).setContent(lstPopup(h)).openOn(map); }
+$('homesBody').addEventListener('click', e=>{
+  const th=e.target.closest('th[data-k]'); if(th){ const k=th.dataset.k; if(k==='pick'||k==='link') return; HSORT = HSORT.k===k? {k,dir:-HSORT.dir} : {k,dir:1}; return renderHomes(); }
+  const g=e.target.closest('tr.grp'); if(g){ const k=g.dataset.g; COLLAPSED.has(k)?COLLAPSED.delete(k):COLLAPSED.add(k); return renderHomes(); }
+  const z=e.target.closest('a.zoom'); if(z){ e.preventDefault(); return zoomTo(z.dataset.id); }
+  const u=e.target.closest('a.unpick'); if(u){ e.preventDefault(); SEL.delete(u.dataset.id); renderListings(); return renderHomes(); }
+  const tr=e.target.closest('tr.row'); if(!tr || e.target.tagName==='A') return;
+  if(e.target.classList.contains('pk')){ e.target.checked?SEL.add(tr.dataset.id):SEL.delete(tr.dataset.id); tr.classList.toggle('sel',e.target.checked); $('hSelN').textContent=SEL.size; renderListings(); return; }
+  zoomTo(tr.dataset.id);
+});
+$('hList').onclick=()=>{HVIEW='list'; renderHomes();}; $('hCompare').onclick=()=>{HVIEW='compare'; renderHomes();};
+$('hClear').onclick=()=>{SEL.clear(); renderListings(); renderHomes();};
+$('hMin').onclick=()=>{ $('homes').classList.toggle('min'); $('hMin').textContent=$('homes').classList.contains('min')?'▴':'▾'; setTimeout(()=>map.invalidateSize(),50); };
+['fPmin','fPmax','fBeds','fBaths','fSqft','fLot','fYear','fDom'].forEach(id=>$(id).addEventListener('input',renderHomes));
+['fGarage','fNoFlag','fMapView'].forEach(id=>$(id).addEventListener('change',renderHomes));
+map.on('moveend',()=>{ if($('fMapView').checked) renderHomes(); });
+setTimeout(()=>map.invalidateSize(),100);
 
 /* ================= LOAD ================= */
 async function loadAll(force){
