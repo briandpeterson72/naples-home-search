@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r6</title>
+<title>Naples Home Search Map r7</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -47,7 +47,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r6</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r7</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -66,7 +66,6 @@
   <div class="row"><label><input type="checkbox" id="dropAlley" checked> Ignore I-75 east of Collier Blvd (Alligator Alley)</label></div>
   <div class="row"><label><input type="checkbox" id="genHosp" checked> General hospitals only (skip rehab/behavioral/specialty)</label></div>
   <div class="row"><label><input type="checkbox" id="anyGroc"> Count any supermarket as a grocery (not just Walmart / Publix / Winn-Dixie)</label></div>
-  <div class="row"><label><input type="checkbox" id="useAmz"> Require an Amazon delivery station within</label><input type="number" id="rAmz" value="20" min="1" step="1"></div>
   <div class="row"><label><input type="checkbox" id="clubPlanned"> Count Costco sites not open yet (south Naples "Coming 2026", Fort Myers construction)</label></div>
   <div class="row"><label><input type="checkbox" id="bjs"> Count BJ's Wholesale Club as a warehouse club</label></div>
   <div class="row"><label><input type="checkbox" id="flood02"> Also avoid FEMA 0.2% (moderate risk, "shaded X") zones</label></div>
@@ -111,7 +110,7 @@
 
   <h2>About the data</h2>
   <div class="note">
-    Highways, grocery stores, hospitals, Walmart, Costco, Sam's Club and Amazon sites come from OpenStreetMap. Amazon doesn't publish delivery areas; the Amazon layer shows its delivery stations and lockers as a stand-in — confirm a ZIP code on Amazon itself. Flood zones are FEMA's National Flood Hazard Layer, where high risk means a Special Flood Hazard Area (A, AE, AH, AO or VE). Evacuation zones come from the Florida Division of Emergency Management's "Know Your Zone" map, with Lee County's own map as a backup.
+    Highways, grocery stores, hospitals, Walmart, Costco, Sam's Club and Amazon sites come from OpenStreetMap. Amazon doesn't publish delivery areas, and distance to a facility doesn't predict service, so Amazon isn't a map condition: check each shortlisted ZIP code on Amazon. Flood zones are FEMA's National Flood Hazard Layer, where high risk means a Special Flood Hazard Area (A, AE, AH, AO or VE). Evacuation zones come from the Florida Division of Emergency Management's "Know Your Zone" map, with Lee County's own map as a backup.
     Distances are straight-line, not driving distance, and the grid resolution is about 150 m. Before you buy, confirm a specific property on the county's evacuation-zone lookup and FEMA's flood map.
   </div>
 </div>
@@ -410,7 +409,7 @@ const LAYERS = [
   {k:'poiHosp', label:'Hospitals', color:'#c0392b', on:true},
   {k:'poiGroc', label:'Grocery stores (Walmart/Publix/Winn-Dixie)', color:'#2e7d32', on:false},
   {k:'poiWal',  label:'Walmart stores', color:'#0071ce', on:true},
-  {k:'poiAmz',  label:'Amazon delivery stations & lockers', color:'#ff9900', on:true},
+  {k:'poiAmz',  label:'Amazon facilities & lockers (info only)', color:'#ff9900', on:false},
   {k:'bound',   label:'Search boundary', color:'#555', on:true},
   {k:'femaLive',label:'FEMA live map (zoom in to see)', color:'#7fb3ff', on:false},
   {k:'draw',    label:'My drawings', color:'#3388ff', on:true}
@@ -435,7 +434,7 @@ if(map.pm){
 function settings(){ return {
   rCorr:+$('rCorr').value||15, rGroc:+$('rGroc').value||10, rHosp:+$('rHosp').value||15, rClub:+$('rClub').value||20,
   us41Lat:+$('us41Lat').value||26.17, dropAlley:$('dropAlley').checked, genHosp:$('genHosp').checked,
-  flood02:$('flood02').checked, evacAllow:+$('evacAllow').value, clubPlanned:$('clubPlanned').checked, bjs:$('bjs').checked, rWal:+$('rWal').value||15, anyGroc:$('anyGroc').checked, useAmz:$('useAmz').checked, rAmz:+$('rAmz').value||20 }; }
+  flood02:$('flood02').checked, evacAllow:+$('evacAllow').value, clubPlanned:$('clubPlanned').checked, bjs:$('bjs').checked, rWal:+$('rWal').value||15, anyGroc:$('anyGroc').checked }; }
 const NON_GENERAL = /rehab|behavioral|psychiatr|hospice|specialty|kindred|select |ltac|long[- ]term|surgery|surgical|veterinar|animal|mental|encompass|nursing|addiction|willough|park royal|david lawrence|children|\bVA\b|veterans|emergency|freestanding/i;
 
 function clipLines(lines, keep){ // split lines to segments where keep(lat,lon)
@@ -468,7 +467,6 @@ function compute(){
   if(r.corrLines) crit.push({key:'corr', label:`Within ${s.rCorr} mi of I-75 / US-41`, pass:maskLines(r.corrLines, s.rCorr)});
   if(r.groc) crit.push({key:'groc', label:`Within ${s.rGroc} mi of a grocery`, pass:maskCircles(r.groc, s.rGroc)});
   if(r.wal) crit.push({key:'wal', label:`Within ${s.rWal} mi of a Walmart`, pass:maskCircles(r.wal, s.rWal)});
-  if(r.amz && s.useAmz) crit.push({key:'amz', label:`Within ${s.rAmz} mi of an Amazon delivery station`, pass:maskCircles(r.amz.filter(a=>!/construction/.test(a.name)), s.rAmz)});
   if(r.hosp) crit.push({key:'hosp', label:`Within ${s.rHosp} mi of a hospital`, pass:maskCircles(r.hosp, s.rHosp)});
   if(r.club) crit.push({key:'club', label:`Within ${s.rClub} mi of Costco/Sam's`, pass:maskCircles(r.club, s.rClub)});
   if(r.floodBad){ const m=maskPolys(r.floodBad); for(let i=0;i<n;i++) m[i]=1-m[i]; crit.push({key:'flood', label: s.flood02?'Outside FEMA flood zones (incl. 0.2%)':'Outside FEMA high-risk flood zones', pass:m}); }
@@ -558,7 +556,6 @@ function evaluatePoint(lat, lon){
   const yes = ok => ok ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>';
   const nearest = list => { let b=null; for(const p of list){ const d=hav(lat,lon,p.lat,p.lon); if(!b||d<b.d) b={d,p}; } return b; };
   if(r.corrLines){ const d=distToLines(lat,lon,r.corrLines); rows.push([yes(d<=s.rCorr),'Highway corridor',`${d.toFixed(1)} mi to I-75/US-41`]); }
-  if(r.amz && r.amz.length){ const n=nearest(r.amz.filter(a=>!/construction/.test(a.name))); if(n) rows.push([s.useAmz?yes(n.d<=s.rAmz):'<span class="note">info</span>','Amazon station',`${n.d.toFixed(1)} mi — ${n.p.name}`]); }
   for(const [k,label,lim] of [['groc','Grocery',s.rGroc],['wal','Walmart',s.rWal],['hosp','Hospital',s.rHosp],['club','Costco/Sam\'s',s.rClub]]){
     if(!r[k]) continue; const n=nearest(r[k]); if(n) rows.push([yes(n.d<=lim),label,`${n.d.toFixed(1)} mi — ${n.p.name}`]); }
   if(D.flood){ const hits=D.flood.filter(f=>pip(lon,lat,f)); const bad=hits.find(f=>f.sfha || (s.flood02&&/0\.2/.test(f.sub)));
