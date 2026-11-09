@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Naples Home Search Map r2</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/esri-leaflet@3/dist/esri-leaflet.js"></script>
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root{--bg:#f7f7f5;--ink:#1d2327;--mute:#5d6870;--line:#d9dcdf;--ok:#1f8a4c;--bad:#c0392b;--warn:#b7791f}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:13px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)}
+  #app{display:flex;height:100%}
+  #panel{width:360px;min-width:360px;overflow-y:auto;background:var(--bg);border-right:1px solid var(--line);padding:12px 14px 40px}
+  #map{flex:1}
+  h1{font-size:16px;margin:0 0 2px}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:16px 0 6px;border-top:1px solid var(--line);padding-top:10px}
+  .sub{color:var(--mute);font-size:12px}
+  .row{display:flex;align-items:center;gap:6px;margin:4px 0}
+  .row label{flex:1}
+  input[type=number]{width:62px;padding:3px 4px;border:1px solid var(--line);border-radius:4px}
+  select{padding:3px;border:1px solid var(--line);border-radius:4px;max-width:200px}
+  button{font:inherit;padding:5px 9px;border:1px solid #9aa3aa;background:#fff;border-radius:5px;cursor:pointer}
+  button.primary{background:#1f5f8b;color:#fff;border-color:#1f5f8b}
+  button:disabled{opacity:.5;cursor:default}
+  .btns{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .status div{display:flex;gap:6px;margin:2px 0}
+  .status .st{width:14px;text-align:center}
+  .status .msg{color:var(--mute)}
+  .ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+  .lyr{display:flex;align-items:center;gap:7px;margin:3px 0;cursor:pointer}
+  .sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.25);flex:none}
+  table.res{width:100%;border-collapse:collapse;font-size:12px}
+  table.res td{padding:2px 4px;border-bottom:1px solid var(--line)}
+  table.res td:last-child{text-align:right}
+  .big{font-size:20px;font-weight:600;color:var(--ok)}
+  #addr{width:100%;padding:5px;border:1px solid var(--line);border-radius:4px}
+  .pop td{padding:1px 6px 1px 0;vertical-align:top}
+  .note{font-size:11.5px;color:var(--mute)}
+  #busy{position:absolute;z-index:1000;top:10px;left:50%;transform:translateX(-50%);background:#1d2327;color:#fff;padding:6px 12px;border-radius:14px;font-size:12px;display:none}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="panel">
+  <h1>Naples Home Search Map <span class="sub">r2</span></h1>
+  <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
+
+  <h2>Data status</h2>
+  <div class="status" id="status"></div>
+  <div class="btns">
+    <button id="btnRefresh" title="Ignore the saved copy and download fresh data">Re-download data</button>
+  </div>
+
+  <h2>Conditions</h2>
+  <div class="row"><label>Max miles from highway corridor<br><span class="note">I-75, then US-41 after I-75 turns east</span></label><input type="number" id="rCorr" value="15" min="1" step="1"></div>
+  <div class="row"><label>Max miles from a grocery store</label><input type="number" id="rGroc" value="10" min="1" step="1"></div>
+  <div class="row"><label>Max miles from a hospital</label><input type="number" id="rHosp" value="15" min="1" step="1"></div>
+  <div class="row"><label>Max miles from Costco / Sam's Club</label><input type="number" id="rClub" value="20" min="1" step="1"></div>
+  <div class="row"><label>US-41 counts south of latitude</label><input type="number" id="us41Lat" value="26.17" step="0.01"></div>
+  <div class="row"><label><input type="checkbox" id="dropAlley" checked> Ignore I-75 east of Collier Blvd (Alligator Alley)</label></div>
+  <div class="row"><label><input type="checkbox" id="genHosp" checked> General hospitals only (skip rehab/behavioral/specialty)</label></div>
+  <div class="row"><label><input type="checkbox" id="flood02"> Also avoid FEMA 0.2% (moderate risk, "shaded X") zones</label></div>
+  <div class="row"><label>Evacuation zones allowed</label>
+    <select id="evacAllow">
+      <option value="0">None (avoid every zone)</option>
+      <option value="1" selected>Least-likely zone only (Collier F, Lee E)</option>
+      <option value="2">Two least-likely (Collier E-F, Lee D-E)</option>
+    </select></div>
+  <div class="btns"><button class="primary" id="btnRun">Recalculate</button></div>
+
+  <h2>Results</h2>
+  <div id="results" class="sub">Loading data…</div>
+
+  <h2>Layers</h2>
+  <div id="layers"></div>
+  <div class="row"><label>Base map</label>
+    <select id="basemap">
+      <option value="street">Street (Esri)</option>
+      <option value="sat">Satellite (Esri)</option>
+      <option value="hybrid">Satellite + labels (Esri)</option>
+      <option value="topo">Topographic (Esri)</option>
+      <option value="light">Light gray</option>
+    </select></div>
+
+  <h2>Check an address</h2>
+  <input id="addr" placeholder="e.g. 1234 Main St, Naples FL — press Enter">
+  <div class="note">Paste a Redfin listing address to see whether it passes.</div>
+
+  <h2>Draw &amp; export</h2>
+  <div class="note">Use the drawing tools (top-left of the map) to sketch areas or drop pins. Drawings are saved in this browser.</div>
+  <div class="btns">
+    <button id="btnUseBoundary">Use last drawn polygon as search boundary</button>
+    <button id="btnResetBoundary">Reset boundary</button>
+  </div>
+  <div class="btns">
+    <button id="btnKmlSweet">Sweet spot → KML</button>
+    <button id="btnGeoSweet">Sweet spot → GeoJSON</button>
+    <button id="btnKmlDraw">My drawings → KML</button>
+  </div>
+  <div class="note">KML opens in Google Earth (web: Projects → New → Import KML) and Google My Maps (Import).</div>
+
+  <h2>About the data</h2>
+  <div class="note">
+    Highways, grocery stores, hospitals, Costco and Sam's Club come from OpenStreetMap. Flood zones are FEMA's National Flood Hazard Layer, where high risk means a Special Flood Hazard Area (A, AE, AH, AO or VE). Evacuation zones come from the Florida Division of Emergency Management's "Know Your Zone" map, with Lee County's own map as a backup.
+    Distances are straight-line, not driving distance, and the grid resolution is about 150 m. Before you buy, confirm a specific property on the county's evacuation-zone lookup and FEMA's flood map.
+  </div>
+</div>
+<div id="map"><div id="busy"></div></div>
+</div>
+
+<script>
+"use strict";
+/* ================= CONFIG ================= */
+const CFG = {
+  bounds: {S:25.88, W:-82.12, N:26.80, E:-81.36},   // outer region from Brian's screenshot
+  stepDeg: 0.0015,                                    // grid cell ~150 m
+  overpass: ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'],
+  fema: ['https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer','https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer'],
+  femaLayer: 28,
+  evacFDEM: [
+    'https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/Evacuation_Zones_20260512_Enrich/FeatureServer',
+    'https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/KYZ_Evac_20240702_Enrich/FeatureServer',
+    'https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/Evacuation_Zones_20240702_Enrich_2/FeatureServer',
+    'https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/Evacuation_Zones_20230608/FeatureServer'
+  ],
+  evacLee: 'https://services2.arcgis.com/LvWGAAhHwbCJ2GMP/ArcGIS/rest/services/Aware_Layers/FeatureServer/1',
+  alleyLon: -81.685,
+  // Open Gulf water (lon,lat), traced along the shoreline. Only removes open water: the shoreline strip is already excluded by flood zones and evacuation Zone A.
+  gulf: [[-82.3,26.43],[-82.13,26.445],[-82.03,26.44],[-81.965,26.46],[-81.875,26.38],[-81.865,26.36],[-81.853,26.33],[-81.837,26.3],[-81.823,26.25],[-81.815,26.21],[-81.808,26.13],[-81.793,26.09],[-81.77,26.0],[-81.745,25.97],[-81.73,25.94],[-81.7,25.89],[-81.7,25.8],[-82.3,25.8]],
+  cacheDays: 30
+};
+const $ = id => document.getElementById(id);
+const R = 6378137, D2R = Math.PI/180;
+
+/* ================= STATUS ================= */
+const STATUS_ITEMS = {roads:'Highways (I-75 / US-41)', pois:'Stores & hospitals', flood:'FEMA flood zones', evac:'Evacuation zones'};
+const statusState = {};
+function setStatus(k, state, msg){
+  statusState[k] = {state, msg};
+  $('status').innerHTML = Object.keys(STATUS_ITEMS).map(key=>{
+    const s = statusState[key] || {state:'wait', msg:'waiting'};
+    const icon = {wait:'…', load:'⏳', ok:'✓', bad:'✗', warn:'!'}[s.state];
+    const cls = {ok:'ok', bad:'bad', warn:'warn'}[s.state] || '';
+    return `<div><span class="st ${cls}">${icon}</span><span>${STATUS_ITEMS[key]}</span><span class="msg">${s.msg||''}</span></div>`;
+  }).join('');
+}
+function busy(t){ const b=$('busy'); if(t){b.textContent=t;b.style.display='block';} else b.style.display='none'; }
+
+/* ================= CACHE (IndexedDB) ================= */
+const idb = {
+  db:null,
+  async open(){ if(this.db) return this.db;
+    this.db = await new Promise((res,rej)=>{ const r=indexedDB.open('naples-map',1);
+      r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+    return this.db; },
+  async get(k){ try{ const db=await this.open(); return await new Promise(res=>{ const q=db.transaction('kv').objectStore('kv').get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>res(null); }); }catch(e){ return null; } },
+  async set(k,v){ try{ const db=await this.open(); await new Promise(res=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=res; t.onerror=res; }); }catch(e){} }
+};
+async function cached(key, fn, force){
+  if(!force){ const c = await idb.get(key);
+    if(c && Date.now()-c.t < CFG.cacheDays*864e5) return {data:c.data, cached:true, t:c.t}; }
+  const data = await fn(); await idb.set(key, {t:Date.now(), data});
+  return {data, cached:false, t:Date.now()};
+}
+const ageTxt = t => { const d=Math.floor((Date.now()-t)/864e5); return d? `saved ${d}d ago` : 'saved today'; };
+
+/* ================= GEOMETRY / GRID ================= */
+const mX = lon => R*lon*D2R;
+const mY = lat => R*Math.log(Math.tan(Math.PI/4 + lat*D2R/2));
+const iLon = x => x/R/D2R;
+const iLat = y => (2*Math.atan(Math.exp(y/R)) - Math.PI/2)/D2R;
+let G;
+function makeGrid(b){
+  const px = R*CFG.stepDeg*D2R, x0 = mX(b.W), y0 = mY(b.N);
+  const w = Math.ceil((mX(b.E)-x0)/px), h = Math.ceil((y0-mY(b.S))/px);
+  G = {px, x0, y0, w, h, N:b.N, Wl:b.W, E:iLon(x0+w*px), S:iLat(y0-h*px)};
+}
+const toPx = (lon,lat) => [(mX(lon)-G.x0)/G.px, (G.y0-mY(lat))/G.px];
+const fromPx = (x,y) => [iLon(G.x0+x*G.px), iLat(G.y0-y*G.px)]; // [lon,lat]
+const kmPerPx = lat => G.px*Math.cos(lat*D2R)/1000;
+const milesToPx = (mi,lat) => mi*1.609344/kmPerPx(lat);
+function expand(b,d){ return {S:b.S-d, W:b.W-d, N:b.N+d, E:b.E+d}; }
+function hav(lat1,lon1,lat2,lon2){ // miles
+  const dLat=(lat2-lat1)*D2R, dLon=(lon2-lon1)*D2R;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*D2R)*Math.cos(lat2*D2R)*Math.sin(dLon/2)**2;
+  return 3958.8*2*Math.asin(Math.sqrt(a));
+}
+function distToLines(lat,lon,lines){ // miles, local planar
+  const kx = 69.17*Math.cos(lat*D2R), ky = 69.05; let best=Infinity;
+  for(const ln of lines){ for(let i=1;i<ln.length;i++){
+    const ax=(ln[i-1][1]-lon)*kx, ay=(ln[i-1][0]-lat)*ky, bx=(ln[i][1]-lon)*kx, by=(ln[i][0]-lat)*ky;
+    const dx=bx-ax, dy=by-ay, L2=dx*dx+dy*dy; let t = L2? -(ax*dx+ay*dy)/L2 : 0; t=Math.max(0,Math.min(1,t));
+    const d=Math.hypot(ax+t*dx, ay+t*dy); if(d<best) best=d; } }
+  return best;
+}
+function ringsBBox(rings){ let a=[Infinity,Infinity,-Infinity,-Infinity];
+  for(const r of rings) for(const p of r){ if(p[0]<a[0])a[0]=p[0]; if(p[1]<a[1])a[1]=p[1]; if(p[0]>a[2])a[2]=p[0]; if(p[1]>a[3])a[3]=p[1]; }
+  return a; }
+function pip(lon,lat,f){ // even-odd over all rings
+  const b=f.bbox; if(lon<b[0]||lon>b[2]||lat<b[1]||lat>b[3]) return false;
+  let inside=false;
+  for(const ring of f.rings){ for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+    if(((yi>lat)!==(yj>lat)) && (lon < (xj-xi)*(lat-yi)/(yj-yi)+xi)) inside=!inside; } }
+  return inside;
+}
+
+/* ================= RASTER MASKS ================= */
+function newCtx(){ const c=document.createElement('canvas'); c.width=G.w; c.height=G.h;
+  const ctx=c.getContext('2d',{willReadFrequently:true}); ctx.fillStyle='#000'; ctx.strokeStyle='#000'; return [c,ctx]; }
+function ctxToMask(ctx){ const d=ctx.getImageData(0,0,G.w,G.h).data, m=new Uint8Array(G.w*G.h);
+  for(let i=0;i<m.length;i++) m[i] = d[i*4+3]>127 ? 1 : 0; return m; }
+function maskCircles(pts, mi){ const [,ctx]=newCtx();
+  for(const p of pts){ const [x,y]=toPx(p.lon,p.lat); ctx.beginPath(); ctx.arc(x,y,milesToPx(mi,p.lat),0,2*Math.PI); ctx.fill(); }
+  return ctxToMask(ctx); }
+function maskLines(lines, mi){ const [,ctx]=newCtx();
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth = 2*milesToPx(mi,(G.N+G.S)/2);
+  for(const ln of lines){ if(ln.length<2) continue; ctx.beginPath();
+    ln.forEach((p,i)=>{ const [x,y]=toPx(p[1],p[0]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke(); }
+  return ctxToMask(ctx); }
+function tracePolys(ctx, feats){ for(const f of feats){ ctx.beginPath();
+  for(const ring of f.rings){ ring.forEach((p,i)=>{ const [x,y]=toPx(p[0],p[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.closePath(); }
+  ctx.fill('evenodd'); } }
+function maskPolys(feats){ const [,ctx]=newCtx(); tracePolys(ctx,feats); return ctxToMask(ctx); }
+function maskToDataURL(mask, rgba){ const [c,ctx]=newCtx(); const img=ctx.createImageData(G.w,G.h);
+  for(let i=0;i<mask.length;i++) if(mask[i]){ img.data[i*4]=rgba[0]; img.data[i*4+1]=rgba[1]; img.data[i*4+2]=rgba[2]; img.data[i*4+3]=rgba[3]; }
+  ctx.putImageData(img,0,0); return c.toDataURL(); }
+
+/* ================= FETCHERS ================= */
+async function overpass(q){
+  let err;
+  for(const u of CFG.overpass){
+    try{ const r = await fetch(u,{method:'POST', body:'data='+encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+      if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }
+    catch(e){ err=e; }
+  }
+  throw err;
+}
+const bbStr = b => `${b.S},${b.W},${b.N},${b.E}`;
+
+async function loadRoads(){
+  const bb = bbStr(expand(CFG.bounds,0.25));
+  const q = `[out:json][timeout:180];(way["highway"~"^(motorway|trunk|primary)$"]["ref"~"(I 75|US 41)"](${bb}););out geom;`;
+  const j = await overpass(q); const i75=[], us41=[];
+  for(const el of j.elements||[]){ if(!el.geometry) continue;
+    const refs = (el.tags.ref||'').split(/\s*;\s*/); const ln = el.geometry.map(g=>[+g.lat.toFixed(5), +g.lon.toFixed(5)]);
+    if(refs.includes('I 75')) i75.push(ln); if(refs.includes('US 41')) us41.push(ln); }
+  if(!i75.length) throw new Error('no I-75 segments returned');
+  return {i75, us41};
+}
+async function loadPOIs(){
+  const bb = bbStr(expand(CFG.bounds,0.4));
+  const q = `[out:json][timeout:180];(nwr["shop"="supermarket"](${bb});nwr["amenity"="hospital"](${bb});nwr["shop"="wholesale"](${bb});nwr["name"~"Costco|Sam's Club",i](${bb}););out center tags;`;
+  const j = await overpass(q); const grocery=[], hospital=[], club=[];
+  for(const el of j.elements||[]){ const t=el.tags||{}; const lat=el.lat??el.center?.lat, lon=el.lon??el.center?.lon; if(lat==null) continue;
+    const p={lat:+lat.toFixed(5), lon:+lon.toFixed(5), name:t.name||t.brand||'(unnamed)', city:t['addr:city']||''};
+    const nm=(t.name||'')+' '+(t.brand||'');
+    if(/costco|sam'?s club/i.test(nm) && t.amenity!=='fuel' && !/gas|fuel|tire|pharmacy|optical/i.test(t.name||'')) { club.push(p); continue; }
+    if(t.shop==='supermarket') grocery.push(p);
+    else if(t.amenity==='hospital') hospital.push(p);
+  }
+  // dedupe clubs within 0.5 mi (building + node)
+  const ded=[]; for(const c of club){ if(!ded.some(d=>hav(d.lat,d.lon,c.lat,c.lon)<0.5)) ded.push(c); }
+  if(!grocery.length) throw new Error('no stores returned');
+  return {grocery, hospital, club:ded};
+}
+
+async function agsJSON(url, params){
+  const r = await fetch(url+'?'+new URLSearchParams(params)); if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json(); if(j.error) throw new Error(j.error.message||'ArcGIS error'); return j;
+}
+let reqCount=0;
+async function agsQueryArea(layerUrl, base, env, depth, out, onProg){
+  const p = {...base, f:'json', geometry:JSON.stringify({xmin:env.W,ymin:env.S,xmax:env.E,ymax:env.N,spatialReference:{wkid:4326}}),
+    geometryType:'esriGeometryEnvelope', inSR:4326, spatialRel:'esriSpatialRelIntersects', outSR:4326, returnGeometry:true};
+  const j = await agsJSON(layerUrl+'/query', p); reqCount++; onProg && onProg();
+  if(j.exceededTransferLimit && depth<6){
+    const mx=(env.W+env.E)/2, my=(env.S+env.N)/2;
+    const quads=[{S:env.S,W:env.W,N:my,E:mx},{S:env.S,W:mx,N:my,E:env.E},{S:my,W:env.W,N:env.N,E:mx},{S:my,W:mx,N:env.N,E:env.E}];
+    await Promise.all(quads.map(q=>agsQueryArea(layerUrl,base,q,depth+1,out,onProg))); return out;
+  }
+  const oid = j.objectIdFieldName || 'OBJECTID';
+  for(const f of j.features||[]){ if(!f.geometry||!f.geometry.rings) continue;
+    const id = f.attributes[oid] ?? f.attributes.OBJECTID ?? f.attributes.FID ?? JSON.stringify(f.geometry.rings[0][0]);
+    if(!out.has(id)) out.set(id, f); }
+  return out;
+}
+async function agsQueryRegion(layerUrl, base, onProg){
+  const b=CFG.bounds, n=3, out=new Map(), tiles=[];
+  for(let i=0;i<n;i++) for(let k=0;k<n;k++) tiles.push({S:b.S+(b.N-b.S)*i/n, N:b.S+(b.N-b.S)*(i+1)/n, W:b.W+(b.E-b.W)*k/n, E:b.W+(b.E-b.W)*(k+1)/n});
+  await Promise.all(tiles.map(t=>agsQueryArea(layerUrl, base, t, 0, out, onProg)));
+  return [...out.values()];
+}
+const round5 = rings => rings.map(r=>r.map(p=>[+p[0].toFixed(5), +p[1].toFixed(5)]));
+
+async function loadFlood(){
+  let lastErr;
+  for(const svc of CFG.fema){
+    try{
+      reqCount=0;
+      const feats = await agsQueryRegion(svc+'/'+CFG.femaLayer,
+        {where:"SFHA_TF='T' OR ZONE_SUBTY LIKE '%0.2%'", outFields:'*', maxAllowableOffset:0.0003, geometryPrecision:5},
+        ()=>setStatus('flood','load',`downloading… ${reqCount} requests`));
+      return feats.map(f=>({zone:f.attributes.FLD_ZONE||'', sub:f.attributes.ZONE_SUBTY||'', sfha:f.attributes.SFHA_TF==='T', rings:round5(f.geometry.rings)})).map(f=>(f.bbox=ringsBBox(f.rings),f));
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr;
+}
+function zoneLetter(v){ if(v==null) return null; const s=String(v).trim().toUpperCase().replace(/^(EVAC(UATION)?\s*)?ZONE\s*/,''); const m=s.match(/^([A-L])$/); return m?m[1]:null; }
+async function polyLayerOf(url){
+  if(/\/\d+$/.test(url)){ const info=await agsJSON(url,{f:'json'}); return {url, info}; }
+  const s = await agsJSON(url,{f:'json'});
+  for(const L of (s.layers||[])){ const info = await agsJSON(url+'/'+L.id,{f:'json'}); if(info.geometryType==='esriGeometryPolygon') return {url:url+'/'+L.id, info}; }
+  throw new Error('no polygon layer');
+}
+async function loadEvacFrom(url, label){
+  const {url:lu, info} = await polyLayerOf(url);
+  const b=CFG.bounds;
+  const sample = await agsJSON(lu+'/query',{f:'json', where:'1=1', outFields:'*', returnGeometry:false, resultRecordCount:200,
+    geometry:JSON.stringify({xmin:b.W,ymin:b.S,xmax:b.E,ymax:b.N,spatialReference:{wkid:4326}}), geometryType:'esriGeometryEnvelope', inSR:4326, spatialRel:'esriSpatialRelIntersects'});
+  const cand = (info.fields||[]).map(f=>f.name).filter(n=>/zone|evac/i.test(n) && !/shape|globalid|objectid|date|user|area|length|surge/i.test(n));
+  let zf=null, best=-1;
+  for(const n of cand){ let s=0; for(const ft of sample.features||[]) if(zoneLetter(ft.attributes[n])) s++;
+    if(/^(countyzone|ezone|evac_zone|evaczone|zone|zone_)$/i.test(n)) s+=0.5; if(s>best){best=s; zf=n;} }
+  if(!zf || best<1) throw new Error('could not find zone field');
+  const sf = (info.fields||[]).filter(f=>/String/.test(f.type));
+  const cf = (sf.find(f=>/^county(_?nam(e)?)?$/i.test(f.name)) || sf.find(f=>/county/i.test(f.name) && !/zon/i.test(f.name)))?.name;
+  reqCount=0;
+  const feats = await agsQueryRegion(lu, {where:'1=1', outFields:'*', maxAllowableOffset:0.0003, geometryPrecision:5},
+    ()=>setStatus('evac','load',`downloading… ${reqCount} requests`));
+  const out=[];
+  for(const f of feats){ const letter=zoneLetter(f.attributes[zf]); if(!letter) continue;
+    out.push({letter, county:(cf? String(f.attributes[cf]||'') : label).replace(/\s*county\s*/i,'').trim() || label, rings:round5(f.geometry.rings)}); out[out.length-1].bbox=ringsBBox(out[out.length-1].rings); }
+  if(!out.length) throw new Error('no zones in region');
+  return {source:label, field:zf, feats:out};
+}
+async function loadEvac(){
+  let lastErr;
+  for(const u of CFG.evacFDEM){ try{ return await loadEvacFrom(u,'FDEM statewide'); }catch(e){ lastErr=e; } }
+  try{ const r = await loadEvacFrom(CFG.evacLee,'Lee'); r.partial=true; return r; }catch(e){ lastErr=e; }
+  throw lastErr;
+}
+
+/* ================= STATE ================= */
+const D = {roads:null, pois:null, flood:null, evac:null};
+let boundaryPoly = null; // [[lon,lat],...] or null → whole region
+try{ const s=localStorage.getItem('naples-boundary'); if(s) boundaryPoly=JSON.parse(s); }catch(e){}
+
+/* ================= MAP ================= */
+const map = L.map('map',{preferCanvas:true}).fitBounds([[CFG.bounds.S,CFG.bounds.W],[CFG.bounds.N,CFG.bounds.E]]);
+const BASE = {
+  street: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'Esri World Street Map'}),
+  hybrid: L.layerGroup([L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}), L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}), L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',{maxZoom:19})]),
+  sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'Esri World Imagery'}),
+  topo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'Esri World Topo'}),
+  light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19, attribution:'© OpenStreetMap, © CARTO'})
+};
+let curBase = BASE.street.addTo(map);
+$('basemap').onchange = e => { map.removeLayer(curBase); curBase = BASE[e.target.value].addTo(map); if(curBase.bringToBack) curBase.bringToBack(); else curBase.eachLayer(l=>l.bringToBack&&l.bringToBack()); };
+
+map.createPane('rasters'); map.getPane('rasters').style.zIndex = 350;
+map.createPane('sweet');   map.getPane('sweet').style.zIndex = 420;
+
+const LAYERS = [
+  {k:'sweet',   label:'Sweet spot (meets everything)', color:'#1f8a4c', on:true},
+  {k:'near',    label:'Near-miss (fails one condition)', color:'#f2c94c', on:false},
+  {k:'flood',   label:'FEMA flood zones', color:'#2f80ed', on:true},
+  {k:'evac',    label:'Evacuation zones', color:'#eb5757', on:true},
+  {k:'corr',    label:'Highway corridor', color:'#9b51e0', on:false},
+  {k:'groc',    label:'Grocery radius', color:'#27ae60', on:false},
+  {k:'hosp',    label:'Hospital radius', color:'#e84393', on:false},
+  {k:'club',    label:'Costco / Sam\'s radius', color:'#f2994a', on:false},
+  {k:'roads',   label:'I-75 / US-41 lines used', color:'#1d2327', on:true},
+  {k:'poiClub', label:'Costco / Sam\'s Club stores', color:'#e67e22', on:true},
+  {k:'poiHosp', label:'Hospitals', color:'#c0392b', on:true},
+  {k:'poiGroc', label:'Grocery stores', color:'#2e7d32', on:false},
+  {k:'bound',   label:'Search boundary', color:'#555', on:true},
+  {k:'femaLive',label:'FEMA live map (zoom in to see)', color:'#7fb3ff', on:false},
+  {k:'draw',    label:'My drawings', color:'#3388ff', on:true}
+];
+const LG = {}; LAYERS.forEach(l=>{ LG[l.k]=L.layerGroup(); if(l.on) LG[l.k].addTo(map); });
+$('layers').innerHTML = LAYERS.map(l=>`<label class="lyr"><input type="checkbox" data-k="${l.k}" ${l.on?'checked':''}><span class="sw" style="background:${l.color}"></span>${l.label}</label>`).join('');
+$('layers').addEventListener('change', e=>{ const k=e.target.dataset.k; if(!k) return; e.target.checked ? LG[k].addTo(map) : map.removeLayer(LG[k]); });
+
+if(L.esri) LG.femaLive.addLayer(L.esri.dynamicMapLayer({url:CFG.fema[0], layers:[CFG.femaLayer], opacity:0.55}));
+
+// drawing tools
+if(map.pm){
+  map.pm.addControls({position:'topleft', drawCircleMarker:false, drawText:false, cutPolygon:false, rotateMode:false});
+  map.pm.setGlobalOptions({layerGroup: LG.draw});
+  const saveDraw = () => { try{ localStorage.setItem('naples-drawings', JSON.stringify(LG.draw.toGeoJSON())); }catch(e){} };
+  map.on('pm:create', e=>{ e.layer.on('pm:edit', saveDraw); saveDraw(); });
+  map.on('pm:remove', saveDraw);
+  try{ const s=localStorage.getItem('naples-drawings'); if(s) L.geoJSON(JSON.parse(s),{pmIgnore:false}).eachLayer(l=>{ LG.draw.addLayer(l); l.on('pm:edit', saveDraw); }); }catch(e){}
+}
+
+/* ================= SETTINGS → DERIVED ================= */
+function settings(){ return {
+  rCorr:+$('rCorr').value||15, rGroc:+$('rGroc').value||10, rHosp:+$('rHosp').value||15, rClub:+$('rClub').value||20,
+  us41Lat:+$('us41Lat').value||26.17, dropAlley:$('dropAlley').checked, genHosp:$('genHosp').checked,
+  flood02:$('flood02').checked, evacAllow:+$('evacAllow').value }; }
+const NON_GENERAL = /rehab|behavioral|psychiatr|hospice|specialty|kindred|select |ltac|long[- ]term|surgery|surgical|veterinar|animal|mental|encompass|nursing/i;
+
+function clipLines(lines, keep){ // split lines to segments where keep(lat,lon)
+  const out=[]; for(const ln of lines){ let cur=[]; for(const p of ln){ if(keep(p[0],p[1])) cur.push(p); else { if(cur.length>1) out.push(cur); cur=[]; } } if(cur.length>1) out.push(cur); } return out; }
+
+function derived(s){
+  const r = {};
+  if(D.roads){
+    r.i75 = s.dropAlley ? clipLines(D.roads.i75, (lat,lon)=>!(lon>CFG.alleyLon && lat<26.25)) : D.roads.i75;
+    r.us41 = clipLines(D.roads.us41, (lat)=>lat < s.us41Lat);
+    r.corrLines = r.i75.concat(r.us41);
+  }
+  if(D.pois){ r.groc=D.pois.grocery; r.club=D.pois.club;
+    r.hosp = s.genHosp ? D.pois.hospital.filter(h=>!NON_GENERAL.test(h.name)) : D.pois.hospital; }
+  if(D.flood){ r.floodBad = D.flood.filter(f=>f.sfha || (s.flood02 && /0\.2/.test(f.sub))); }
+  if(D.evac){
+    const maxBy={}; for(const f of D.evac.feats){ const c=f.county; if(!maxBy[c] || f.letter>maxBy[c]) maxBy[c]=f.letter; }
+    for(const f of D.evac.feats){ f.rank = maxBy[f.county].charCodeAt(0) - f.letter.charCodeAt(0); f.allowed = f.rank < s.evacAllow; }
+    r.evacBad = D.evac.feats.filter(f=>!f.allowed);
+  }
+  return r;
+}
+
+/* ================= COMPUTE + RENDER ================= */
+let LAST = null;
+function compute(){
+  const s = settings(), r = derived(s), n = G.w*G.h;
+  busy('Calculating…');
+  const crit = [];  // {key,label,pass:Uint8Array}
+  if(r.corrLines) crit.push({key:'corr', label:`Within ${s.rCorr} mi of I-75 / US-41`, pass:maskLines(r.corrLines, s.rCorr)});
+  if(r.groc) crit.push({key:'groc', label:`Within ${s.rGroc} mi of a grocery`, pass:maskCircles(r.groc, s.rGroc)});
+  if(r.hosp) crit.push({key:'hosp', label:`Within ${s.rHosp} mi of a hospital`, pass:maskCircles(r.hosp, s.rHosp)});
+  if(r.club) crit.push({key:'club', label:`Within ${s.rClub} mi of Costco/Sam's`, pass:maskCircles(r.club, s.rClub)});
+  if(r.floodBad){ const m=maskPolys(r.floodBad); for(let i=0;i<n;i++) m[i]=1-m[i]; crit.push({key:'flood', label: s.flood02?'Outside FEMA flood zones (incl. 0.2%)':'Outside FEMA high-risk flood zones', pass:m}); }
+  if(r.evacBad){ const m=maskPolys(r.evacBad); for(let i=0;i<n;i++) m[i]=1-m[i]; crit.push({key:'evac', label:'Outside blocked evacuation zones', pass:m}); }
+  // boundary
+  let inB;
+  if(boundaryPoly){ inB = maskPolys([{rings:[boundaryPoly]}]); } else { inB = new Uint8Array(n).fill(1); }
+  { const wm = maskPolys([{rings:[CFG.gulf]}]); for(let i=0;i<n;i++) if(wm[i]) inB[i]=0; }
+  const sweet=new Uint8Array(n), near=new Uint8Array(n), fails=new Uint8Array(n);
+  for(let i=0;i<n;i++){ if(!inB[i]) continue; let f=0; for(const c of crit) if(!c.pass[i]) f++; fails[i]=f; if(f===0) sweet[i]=1; else if(f===1) near[i]=1; }
+  // areas
+  const sqmiRow = y => { const lat=fromPx(0,y+0.5)[1]; const k=kmPerPx(lat); return k*k*0.386102; };
+  let aB=0, aS=0; const aC = crit.map(()=>0);
+  for(let y=0;y<G.h;y++){ const a=sqmiRow(y); for(let x=0;x<G.w;x++){ const i=y*G.w+x; if(!inB[i]) continue; aB+=a; if(sweet[i]) aS+=a; crit.forEach((c,ci)=>{ if(c.pass[i]) aC[ci]+=a; }); } }
+  LAST = {s, r, crit, sweet, near, inB, aB, aS, aC};
+  render(); busy(null);
+}
+
+function overlay(group, url){ group.clearLayers(); group.addLayer(L.imageOverlay(url, [[G.S,G.Wl],[G.N,G.E]], {pane:'rasters', opacity:1, interactive:false})); }
+function sweetGeoJSON(){
+  if(!LAST || typeof d3==='undefined') return null;
+  const vals = new Float64Array(LAST.sweet.length); for(let i=0;i<vals.length;i++) vals[i]=LAST.sweet[i];
+  const c = d3.contours().size([G.w,G.h]).thresholds([0.5]).smooth(false)(vals)[0];
+  const coords = c.coordinates.map(poly=>poly.map(ring=>ring.map(([x,y])=>{ const [lon,lat]=fromPx(x,y); return [+lon.toFixed(5), +lat.toFixed(5)]; })));
+  return {type:'Feature', properties:{name:'Sweet spot', criteria: LAST.crit.map(c=>c.label).join('; ')}, geometry:{type:'MultiPolygon', coordinates:coords}};
+}
+function render(){
+  const {r, crit, near, s} = LAST;
+  // sweet spot vector
+  LG.sweet.clearLayers();
+  const gj = sweetGeoJSON();
+  if(gj) LG.sweet.addLayer(L.geoJSON(gj,{pane:'sweet', interactive:false, style:{color:'#145c33', weight:1.5, fillColor:'#27ae60', fillOpacity:0.38}}));
+  else overlay(LG.sweet, maskToDataURL(LAST.sweet,[39,174,96,110]));
+  overlay(LG.near, maskToDataURL(near,[242,201,76,120]));
+  const colors = {corr:[155,81,224,70], groc:[39,174,96,70], hosp:[232,67,147,70], club:[242,153,74,80]};
+  for(const k of ['corr','groc','hosp','club']){ const c=crit.find(c=>c.key===k); LG[k].clearLayers(); if(c) overlay(LG[k], maskToDataURL(c.pass, colors[k])); }
+  // flood display
+  LG.flood.clearLayers();
+  if(D.flood){ const [cv,ctx]=newCtx();
+    ctx.fillStyle='rgba(120,180,255,0.45)'; tracePolys(ctx, D.flood.filter(f=>!f.sfha));
+    ctx.fillStyle='rgba(47,128,237,0.55)'; tracePolys(ctx, D.flood.filter(f=>f.sfha && !/^V/.test(f.zone)));
+    ctx.fillStyle='rgba(20,60,160,0.65)'; tracePolys(ctx, D.flood.filter(f=>/^V/.test(f.zone)));
+    overlay(LG.flood, cv.toDataURL()); }
+  // evac display
+  LG.evac.clearLayers();
+  if(D.evac){ const [cv,ctx]=newCtx();
+    const sorted=[...D.evac.feats].sort((a,b)=>b.rank-a.rank);   // most-likely (high rank) drawn last on top
+    for(const f of sorted){ ctx.fillStyle = f.allowed ? 'rgba(255,230,120,0.35)' : `rgba(235,87,87,${Math.min(0.25+0.08*f.rank,0.6)})`; tracePolys(ctx,[f]); }
+    overlay(LG.evac, cv.toDataURL()); }
+  // roads
+  LG.roads.clearLayers();
+  if(r.i75){ r.i75.forEach(l=>LG.roads.addLayer(L.polyline(l,{color:'#1f5f8b',weight:4,opacity:.9}).bindTooltip('I-75 (counted)')));
+    r.us41.forEach(l=>LG.roads.addLayer(L.polyline(l,{color:'#c0392b',weight:4,opacity:.9}).bindTooltip('US-41 (counted)'))); }
+  // POIs
+  LG.poiClub.clearLayers(); LG.poiHosp.clearLayers(); LG.poiGroc.clearLayers();
+  if(r.club) r.club.forEach(p=>{ LG.poiClub.addLayer(L.circleMarker([p.lat,p.lon],{radius:8,color:'#fff',weight:2,fillColor:'#e67e22',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')));
+    LG.poiClub.addLayer(L.circle([p.lat,p.lon],{radius:s.rClub*1609.344,color:'#e67e22',weight:1,dashArray:'4 4',fill:false,interactive:false})); });
+  if(r.hosp) r.hosp.forEach(p=>LG.poiHosp.addLayer(L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1.5,fillColor:'#c0392b',fillOpacity:1}).bindTooltip(p.name)));
+  if(r.groc) r.groc.forEach(p=>LG.poiGroc.addLayer(L.circleMarker([p.lat,p.lon],{radius:3,color:'#2e7d32',weight:1,fillOpacity:.8}).bindTooltip(p.name)));
+  // boundary
+  LG.bound.clearLayers();
+  const bl = boundaryPoly ? boundaryPoly.map(p=>[p[1],p[0]]) : [[CFG.bounds.S,CFG.bounds.W],[CFG.bounds.S,CFG.bounds.E],[CFG.bounds.N,CFG.bounds.E],[CFG.bounds.N,CFG.bounds.W]];
+  LG.bound.addLayer(L.polygon(bl,{color:'#444',weight:2,dashArray:'6 6',fill:false,interactive:false}));
+  // results panel
+  const missing = Object.keys(STATUS_ITEMS).filter(k=>!D[k]);
+  $('results').innerHTML =
+    `<div><span class="big">${LAST.aS.toFixed(0)} sq mi</span> meet every condition<br><span class="note">${(100*LAST.aS/LAST.aB).toFixed(1)}% of the ${LAST.aB.toFixed(0)} sq mi search area</span></div>
+     <table class="res">${crit.map((c,i)=>`<tr><td>${c.label}</td><td>${(100*LAST.aC[i]/LAST.aB).toFixed(0)}% pass</td></tr>`).join('')}</table>
+     ${missing.length?`<div class="bad" style="margin-top:6px">Not applied (data failed to load): ${missing.map(k=>STATUS_ITEMS[k]).join(', ')}</div>`:''}
+     ${D.evac&&D.evac.partial?'<div class="warn">Evacuation zones: only Lee County loaded (the statewide map failed). Collier evacuation zones are NOT applied.</div>':''}
+     <div class="note" style="margin-top:4px">Counts in view: ${r.groc?r.groc.length:0} groceries, ${r.hosp?r.hosp.length:0} hospitals, ${r.club?r.club.length:0} Costco/Sam's stores.</div>`;
+}
+
+/* ================= POINT CHECK ================= */
+function evaluatePoint(lat, lon){
+  if(!LAST) return 'Data still loading…';
+  const {s,r} = LAST; const rows=[];
+  const yes = ok => ok ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>';
+  const nearest = list => { let b=null; for(const p of list){ const d=hav(lat,lon,p.lat,p.lon); if(!b||d<b.d) b={d,p}; } return b; };
+  if(r.corrLines){ const d=distToLines(lat,lon,r.corrLines); rows.push([yes(d<=s.rCorr),'Highway corridor',`${d.toFixed(1)} mi to I-75/US-41`]); }
+  for(const [k,label,lim] of [['groc','Grocery',s.rGroc],['hosp','Hospital',s.rHosp],['club','Costco/Sam\'s',s.rClub]]){
+    if(!r[k]) continue; const n=nearest(r[k]); if(n) rows.push([yes(n.d<=lim),label,`${n.d.toFixed(1)} mi — ${n.p.name}`]); }
+  if(D.flood){ const hits=D.flood.filter(f=>pip(lon,lat,f)); const bad=hits.find(f=>f.sfha || (s.flood02&&/0\.2/.test(f.sub)));
+    const z = hits.length ? hits.map(f=>f.zone+(/0\.2/.test(f.sub)?' (0.2%)':'')).join(', ') : 'X (minimal)';
+    rows.push([yes(!bad),'FEMA flood zone', z]); }
+  if(D.evac){ const hits=D.evac.feats.filter(f=>pip(lon,lat,f)); const bad=hits.find(f=>!f.allowed);
+    rows.push([yes(!bad),'Evacuation zone', hits.length? hits.map(f=>`${f.county} ${f.letter}`).join(', ') : 'none']); }
+  const pass = rows.every(r=>r[0].includes('✓'));
+  return `<b>${pass?'<span class="ok">PASSES every condition</span>':'<span class="bad">Does not pass</span>'}</b><br><span class="note">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>
+    <table class="pop">${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table>
+    <div class="note">Confirm on FEMA's flood map and the county's evacuation-zone lookup before you buy.</div>`;
+}
+map.on('click', e=>{ if(map.pm && map.pm.globalDrawModeEnabled && map.pm.globalDrawModeEnabled()) return;
+  L.popup({maxWidth:360}).setLatLng(e.latlng).setContent(evaluatePoint(e.latlng.lat, e.latlng.lng)).openOn(map); });
+
+$('addr').addEventListener('keydown', async e=>{
+  if(e.key!=='Enter') return; const q=e.target.value.trim(); if(!q) return;
+  busy('Looking up address…');
+  try{
+    const b=expand(CFG.bounds,0.3);
+    const u='https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?'+new URLSearchParams({f:'json', SingleLine:q, maxLocations:1, countryCode:'USA', searchExtent:`${b.W},${b.S},${b.E},${b.N}`, outFields:'Match_addr'});
+    const jr = await (await fetch(u)).json();
+    const j = (jr.candidates||[]).map(c=>({lat:c.location.y, lon:c.location.x, display_name:c.address}));
+    if(!j.length){ busy(null); L.popup().setLatLng(map.getCenter()).setContent('Address not found. Try adding the city and "FL".').openOn(map); return; }
+    const lat=+j[0].lat, lon=+j[0].lon; map.setView([lat,lon],13);
+    L.popup({maxWidth:360}).setLatLng([lat,lon]).setContent(`<b>${j[0].display_name.split(',').slice(0,3).join(',')}</b><br>`+evaluatePoint(lat,lon)).openOn(map);
+  }catch(err){ L.popup().setLatLng(map.getCenter()).setContent('Address lookup failed: '+err.message).openOn(map); }
+  busy(null);
+});
+
+/* ================= BOUNDARY / EXPORT ================= */
+$('btnUseBoundary').onclick = ()=>{
+  let poly=null; LG.draw.eachLayer(l=>{ if(l instanceof L.Polygon) poly=l; });
+  if(!poly){ $('results').insertAdjacentHTML('afterbegin','<div class="warn">Draw a polygon or rectangle first (drawing tools at the top-left of the map).</div>'); return; }
+  const ring = poly.getLatLngs()[0].map(ll=>[ll.lng, ll.lat]);
+  boundaryPoly = ring; try{ localStorage.setItem('naples-boundary', JSON.stringify(ring)); }catch(e){}
+  compute();
+};
+$('btnResetBoundary').onclick = ()=>{ boundaryPoly=null; try{ localStorage.removeItem('naples-boundary'); }catch(e){} compute(); };
+
+function download(name, text, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000); }
+const esc = s => String(s).replace(/[<>&]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+function kmlGeom(g){
+  const ring = r => `<LinearRing><coordinates>${r.map(p=>p[0]+','+p[1]+',0').join(' ')}</coordinates></LinearRing>`;
+  const poly = p => `<Polygon><outerBoundaryIs>${ring(p[0])}</outerBoundaryIs>${p.slice(1).map(h=>`<innerBoundaryIs>${ring(h)}</innerBoundaryIs>`).join('')}</Polygon>`;
+  switch(g.type){
+    case 'Point': return `<Point><coordinates>${g.coordinates[0]},${g.coordinates[1]},0</coordinates></Point>`;
+    case 'LineString': return `<LineString><coordinates>${g.coordinates.map(p=>p[0]+','+p[1]+',0').join(' ')}</coordinates></LineString>`;
+    case 'Polygon': return poly(g.coordinates);
+    case 'MultiPolygon': return `<MultiGeometry>${g.coordinates.map(poly).join('')}</MultiGeometry>`;
+    case 'MultiLineString': return `<MultiGeometry>${g.coordinates.map(l=>`<LineString><coordinates>${l.map(p=>p[0]+','+p[1]+',0').join(' ')}</coordinates></LineString>`).join('')}</MultiGeometry>`;
+    default: return '';
+  }
+}
+function toKML(features, docName, color){
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(docName)}</name>
+<Style id="s"><LineStyle><color>ff${color}</color><width>2</width></LineStyle><PolyStyle><color>66${color}</color></PolyStyle></Style>
+${features.map((f,i)=>`<Placemark><name>${esc(f.properties?.name||docName+' '+(i+1))}</name>${f.properties?.criteria?`<description>${esc(f.properties.criteria)}</description>`:''}<styleUrl>#s</styleUrl>${kmlGeom(f.geometry)}</Placemark>`).join('\n')}
+</Document></kml>`;
+}
+const stamp = () => new Date().toISOString().slice(0,10).replace(/-/g,'');
+$('btnKmlSweet').onclick = ()=>{ const g=sweetGeoJSON(); if(g) download(`Naples_SweetSpot_${stamp()}.kml`, toKML([g],'Naples sweet spot','4cae27'), 'application/vnd.google-earth.kml+xml'); };
+$('btnGeoSweet').onclick = ()=>{ const g=sweetGeoJSON(); if(g) download(`Naples_SweetSpot_${stamp()}.geojson`, JSON.stringify({type:'FeatureCollection',features:[g]}), 'application/geo+json'); };
+$('btnKmlDraw').onclick = ()=>{ const fc=LG.draw.toGeoJSON(); download(`Naples_MyDrawings_${stamp()}.kml`, toKML(fc.features,'My drawings','ff8833'), 'application/vnd.google-earth.kml+xml'); };
+
+/* ================= LOAD ================= */
+async function loadAll(force){
+  $('btnRun').disabled=true; $('btnRefresh').disabled=true;
+  const jobs = [
+    ['roads', ()=>loadRoads(), d=>`${d.i75.length} I-75 / ${d.us41.length} US-41 segments`],
+    ['pois',  ()=>loadPOIs(),  d=>`${d.grocery.length} groceries, ${d.hospital.length} hospitals, ${d.club.length} clubs`],
+    ['flood', ()=>loadFlood(), d=>`${d.length} zones`],
+    ['evac',  ()=>loadEvac(),  d=>`${d.feats.length} zones (${d.source})`]
+  ];
+  await Promise.all(jobs.map(async ([k,fn,desc])=>{
+    setStatus(k,'load','loading…');
+    try{ const res = await cached('v2-'+k, fn, force); D[k]=res.data;
+      setStatus(k, (k==='evac'&&res.data.partial)?'warn':'ok', `${desc(res.data)} · ${res.cached?ageTxt(res.t):'downloaded'}`); }
+    catch(e){ D[k]=null; setStatus(k,'bad', e.message||String(e)); }
+  }));
+  makeGrid(CFG.bounds); compute();
+  $('btnRun').disabled=false; $('btnRefresh').disabled=false;
+}
+$('btnRun').onclick = ()=>compute();
+$('btnRefresh').onclick = ()=>loadAll(true);
+Object.keys(STATUS_ITEMS).forEach(k=>setStatus(k,'wait','waiting'));
+busy('Loading data (first run can take a minute or two)…');
+loadAll(false);
+</script>
+</body>
+</html>
