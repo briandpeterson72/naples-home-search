@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r7</title>
+<title>Naples Home Search Map r8</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -47,7 +47,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r7</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r8</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -90,6 +90,19 @@
       <option value="topo">Topographic (Esri)</option>
       <option value="light">Light gray</option>
     </select></div>
+
+  <h2>Listings</h2>
+  <div class="note">Load the listings file Claude saved to your Downloads folder. It stays in this browser only and is never uploaded.</div>
+  <input type="file" id="lstFile" accept=".json" style="margin:6px 0">
+  <div id="lstInfo" class="note"></div>
+  <div class="row" id="lstClasses">
+    <label><input type="checkbox" data-c="A" checked> <span class="sw" style="display:inline-block;background:#1b9e3a"></span> A</label>
+    <label><input type="checkbox" data-c="B" checked> <span class="sw" style="display:inline-block;background:#2563eb"></span> B</label>
+    <label><input type="checkbox" data-c="S" checked> <span class="sw" style="display:inline-block;background:#8e44ad"></span> Stretch</label>
+    <label><input type="checkbox" data-c="C" checked> <span class="sw" style="display:inline-block;background:#6b7280"></span> C</label>
+  </div>
+  <div class="row"><label>I-75 exit</label><select id="lstExit"><option value="">All exits</option></select></div>
+  <div class="row"><label><input type="checkbox" id="lstGarageOnly"> Hide A/B/Stretch homes without a confirmed garage</label></div>
 
   <h2>Check an address</h2>
   <input id="addr" placeholder="e.g. 1234 Main St, Naples FL — press Enter">
@@ -412,7 +425,8 @@ const LAYERS = [
   {k:'poiAmz',  label:'Amazon facilities & lockers (info only)', color:'#ff9900', on:false},
   {k:'bound',   label:'Search boundary', color:'#555', on:true},
   {k:'femaLive',label:'FEMA live map (zoom in to see)', color:'#7fb3ff', on:false},
-  {k:'draw',    label:'My drawings', color:'#3388ff', on:true}
+  {k:'draw',    label:'My drawings', color:'#3388ff', on:true},
+  {k:'listings',label:'Listings (from your file)', color:'#1b9e3a', on:true}
 ];
 const LG = {}; LAYERS.forEach(l=>{ LG[l.k]=L.layerGroup(); if(l.on) LG[l.k].addTo(map); });
 $('layers').innerHTML = LAYERS.map(l=>`<label class="lyr"><input type="checkbox" data-k="${l.k}" ${l.on?'checked':''}><span class="sw" style="background:${l.color}"></span>${l.label}</label>`).join('');
@@ -620,6 +634,46 @@ const stamp = () => new Date().toISOString().slice(0,10).replace(/-/g,'');
 $('btnKmlSweet').onclick = ()=>{ const g=sweetGeoJSON(); if(g) download(`Naples_SweetSpot_${stamp()}.kml`, toKML([g],'Naples sweet spot','4cae27'), 'application/vnd.google-earth.kml+xml'); };
 $('btnGeoSweet').onclick = ()=>{ const g=sweetGeoJSON(); if(g) download(`Naples_SweetSpot_${stamp()}.geojson`, JSON.stringify({type:'FeatureCollection',features:[g]}), 'application/geo+json'); };
 $('btnKmlDraw').onclick = ()=>{ const fc=LG.draw.toGeoJSON(); download(`Naples_MyDrawings_${stamp()}.kml`, toKML(fc.features,'My drawings','ff8833'), 'application/vnd.google-earth.kml+xml'); };
+
+/* ================= LISTINGS (local file only) ================= */
+const CLS_COLOR={A:'#1b9e3a',B:'#2563eb',S:'#8e44ad',C:'#6b7280'}, CLS_NAME={A:'Class A',B:'Class B',S:'Stretch',C:'Class C'};
+let LST=null;
+const money = v => v==null?'—':'$'+Math.round(v).toLocaleString();
+function lstPopup(h){
+  const lotTxt = h.lot? (h.lot>=43560? (h.lot/43560).toFixed(2)+' ac' : Math.round(h.lot).toLocaleString()+' sq ft') : 'not listed';
+  return `<b>${esc(h.addr)}</b>, ${esc(h.city)} ${esc(h.zip)}<br>
+   <span style="color:${CLS_COLOR[h.cls]};font-weight:600">${CLS_NAME[h.cls]}</span> · ${h.type}${h.feeNote?' · '+esc(h.feeNote):''}<br>
+   <table class="pop"><tr><td>Price</td><td>${money(h.price)}</td></tr><tr><td>Beds / baths</td><td>${h.beds} / ${h.baths}</td></tr>
+   <tr><td>Home size</td><td>${h.sqft?Math.round(h.sqft).toLocaleString()+' sq ft':'—'}</td></tr><tr><td>Lot</td><td>${lotTxt}</td></tr>
+   <tr><td>Year built</td><td>${h.year||'—'}</td></tr><tr><td>Garage</td><td>${esc(h.garage||'—')}</td></tr>
+   <tr><td>I-75 exit</td><td>${esc(h.exit)} (${h.exitMi} mi)</td></tr><tr><td>Flood zone</td><td>${esc(h.flood||'—')}</td></tr><tr><td>Evacuation</td><td>${esc(h.evac||'—')}</td></tr>
+   <tr><td>Days on market</td><td>${esc(h.dom||'—')}</td></tr></table>
+   <a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin ↗</a>`;
+}
+function renderListings(){
+  LG.listings.clearLayers(); if(!LST) return;
+  const on=new Set([...document.querySelectorAll('#lstClasses input:checked')].map(i=>i.dataset.c));
+  const ex=$('lstExit').value, gOnly=$('lstGarageOnly').checked; let n=0; const cnt={A:0,B:0,S:0,C:0};
+  for(const h of LST.rows){
+    if(!on.has(h.cls) || (ex && h.exit!==ex)) continue;
+    if(gOnly && h.cls!=='C' && !/car|yes/.test(h.garage||'')) continue;
+    n++; cnt[h.cls]++;
+    LG.listings.addLayer(L.circleMarker([h.lat,h.lon],{radius:h.cls==='C'?5:7,color:'#fff',weight:1.5,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
+  }
+  $('lstInfo').innerHTML = `${esc(LST.name||'listings')} · pulled ${esc(LST.generated||'?')} · showing ${n}: A ${cnt.A}, B ${cnt.B}, Stretch ${cnt.S}, C ${cnt.C}`;
+}
+function useListings(obj, save){
+  LST=obj; const exits=[...new Set(obj.rows.map(r=>r.exit))].sort((a,b)=>(parseInt(b.match(/\d+/))||0)-(parseInt(a.match(/\d+/))||0));
+  $('lstExit').innerHTML='<option value="">All exits</option>'+exits.map(e=>`<option>${esc(e)}</option>`).join('');
+  if(save) idb.set('listings',{t:Date.now(),data:obj});
+  renderListings();
+}
+$('lstFile').addEventListener('change', async e=>{ const f=e.target.files[0]; if(!f) return;
+  try{ const obj=JSON.parse(await f.text()); if(!obj.rows) throw new Error('not a listings file'); obj.name=f.name; useListings(obj,true); }
+  catch(err){ $('lstInfo').innerHTML='<span class="bad">Could not read that file: '+esc(err.message)+'</span>'; } });
+['lstExit','lstGarageOnly'].forEach(id=>$(id).addEventListener('change',renderListings));
+$('lstClasses').addEventListener('change',renderListings);
+idb.get('listings').then(c=>{ if(c&&c.data) useListings(c.data,false); });
 
 /* ================= LOAD ================= */
 async function loadAll(force){
