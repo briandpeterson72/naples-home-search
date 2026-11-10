@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r12</title>
+<title>Naples Home Search Map r13</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -65,7 +65,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r12</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r13</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -738,13 +738,13 @@ function hFiltered(){
     && (!gar||/car|yes/.test(h.garage||'')||h.cls==='C'&&/car|yes/.test(h.garage||'')) && (!nf||!h.note) && (!mv||b.contains([h.lat,h.lon])));
 }
 const COLS=[['pick',''],['cls','Class'],['addr','Address'],['price','Price'],['ppsf','$/sq ft'],['beds','Beds'],['baths','Baths'],['sqft','Sq ft'],['lot','Lot (ac)'],['year','Built'],
-  ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['link','Redfin']];
+  ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['tax','Tax/yr'],['water','Water'],['sewer','Sewer'],['storm','Storm protection'],['pool','Pool'],['elevFt','Elev ft'],['walMi','Mi Walmart'],['hospMi','Mi hospital'],['subdivision','Subdivision'],['link','Redfin']];
 function sortVal(h,k){ return k==='ppsf'?ppsf(h): k==='lot'?acres(h): k==='garage'?garN(h): k==='dom'?+h.dom: k==='status'?status(h): k==='fee'?(h.feeNote||''): h[k]; }
 function hRow(h){ const id=h.url; const pc=ppsf(h), ac=acres(h);
   return `<tr class="hrow${SEL.has(id)?' sel':''}" data-id="${esc(id)}"><td><input type="checkbox" class="pk" ${SEL.has(id)?'checked':''}></td>
   <td><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${CLS_NAME[h.cls]}</td><td>${esc(h.addr)}, ${esc(h.city)}</td><td>${money(h.price)}</td><td>${pc?'$'+Math.round(pc):'—'}</td>
   <td>${h.beds}</td><td>${h.baths}</td><td>${h.sqft?Math.round(h.sqft).toLocaleString():'—'}</td><td>${ac?ac.toFixed(2):'—'}</td><td>${h.year||'—'}</td><td>${esc(h.garage||'—')}</td><td>${esc(h.type)}</td>
-  <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
+  <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td>${h.tax!=null?money(h.tax):''}</td><td>${esc(h.water||'')}</td><td>${esc(h.sewer||'')}</td><td>${esc(h.storm||'')}</td><td>${esc(h.pool||'')}</td><td>${h.elevFt??''}</td><td>${h.walMi??''}</td><td>${h.hospMi??''}</td><td>${esc(h.subdivision||'')}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
 function renderHomes(){
   const rows=hFiltered(); $('hCount').textContent = LST? `${rows.length} of ${LST.rows.length} homes` : ''; $('hSelN').textContent=SEL.size;
   $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare');
@@ -769,6 +769,15 @@ function renderCompare(){
    ['Lot',h=>acres(h)?acres(h).toFixed(2)+' ac':'—',h=>acres(h)||0],['Year built',h=>h.year||'—',h=>h.year||0],['Garage',h=>h.garage||'—',h=>garN(h)],
    ['Type',h=>h.type,null],['HOA / fee / notes',h=>h.feeNote||'none',null],['Flood zone',h=>h.flood||'—',null],['Evacuation zone',h=>h.evac||'—',null],
    ['Days on market',h=>h.dom||'—',null],['I-75 section',h=>h.exit,null],['Miles to exit',h=>h.exitMi,h=>-h.exitMi],['Status',h=>status(h),null],
+   ['County / subdivision',h=>esc((h.county||'')+(h.subdivision?' · '+h.subdivision:''))||'—',null],['Stories',h=>h.stories??'—',null],['Full / half baths',h=>h.fullBaths!=null?h.fullBaths+' / '+(h.halfBaths??0):'—',null],
+   ['Annual tax',h=>h.tax!=null?money(h.tax)+' ('+h.taxYear+')':'—',h=>h.tax!=null?-h.tax:-1e9],['CDD',h=>esc(h.cdd||'not mentioned'),null],['Water / sewer',h=>esc((h.water||'?')+' / '+(h.sewer||'?')),null],
+   ['Roof',h=>esc((h.roof||'—')+(h.roofYear?' ('+h.roofYear+')':'')),null],['Construction',h=>esc(h.construction||'—')+(h.newBuild?' · new build':'')+(h.builder?' · '+esc(h.builder):''),null],
+   ['Storm protection',h=>esc(h.storm||'—'),null],['Cooling',h=>esc(h.cooling||'—'),null],['Pool',h=>esc(h.pool||'—'),null],['Waterfront / view',h=>esc(h.waterView||'—'),null],['Parking',h=>`<span style="white-space:normal;display:inline-block;max-width:260px">${esc(h.parking||'—')}</span>`,null],
+   ['Elevation',h=>h.elevFt!=null?h.elevFt+' ft':'—',h=>h.elevFt??-1],['Miles to Gulf (approx)',h=>h.coastMi??'—',null],['Risk: flood / fire / heat (1-10)',h=>[h.riskFlood,h.riskFire,h.riskHeat].map(x=>x??'–').join(' / '),h=>-(h.riskFlood??99)],
+   ['Walmart',h=>h.walMi!=null?h.walMi+' mi — '+esc(h.walName):'—',h=>-(h.walMi??99)],['Grocery',h=>h.grocMi!=null?h.grocMi+' mi — '+esc(h.grocName):'—',h=>-(h.grocMi??99)],['Hospital',h=>h.hospMi!=null?h.hospMi+' mi — '+esc(h.hospName):'—',h=>-(h.hospMi??99)],['Costco / Sam\'s',h=>h.clubMi!=null?h.clubMi+' mi — '+esc(h.clubName):'—',h=>-(h.clubMi??99)],
+   ['Redfin Estimate',h=>h.redfinEst?money(h.redfinEst):'—',null],['Original list / changes',h=>(h.origListPrice?money(h.origListPrice):'—')+' / '+(h.priceChanges??0),null],['Last sold',h=>h.lastSoldPrice?money(h.lastSoldPrice)+' on '+h.lastSoldDate:'—',null],
+   ['Schools',h=>`<span style="white-space:normal;display:inline-block;max-width:260px">${esc(h.schools||'—')}</span>`,h=>h.schoolAvg??0],['Agent / MLS #',h=>esc((h.agent||'—')+' · '+(h.mls||'')),null],
+   ['Description',h=>`<span style="white-space:normal;display:inline-block;max-width:260px;font-size:11.5px">${esc((h.desc||'').slice(0,600))}</span>`,null],
    ['Links',h=>`<a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Redfin ↗</a> · <a href="#" class="zoom" data-id="${esc(h.url)}">Show on map</a> · <a href="#" class="unpick" data-id="${esc(h.url)}">Remove</a>`,null]];
   let t='<table class="cmp"><tr><th></th>'+hs.map(h=>`<th><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${esc(h.addr)}<br><span class="note">${esc(h.city)} ${esc(h.zip)}</span></th>`).join('')+'</tr>';
   for(const [lab,f,score] of spec){ let best=null; if(score&&hs.length>1){ best=Math.max(...hs.map(score)); }
