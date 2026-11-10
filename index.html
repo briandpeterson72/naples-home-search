@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r13</title>
+<title>Naples Home Search Map r14</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -30,6 +30,19 @@
   table.ht tr.grp td{background:#1f5f8b;color:#fff;font-weight:600;cursor:pointer}
   table.ht tr.hrow:hover td{background:#fff7d6}
   table.ht tr.sel td{background:#e3f1ff}
+  #right.full #map{display:none} #right.full #homes{height:100%}
+  #shTabs{position:sticky;top:0;left:0;z-index:5;height:30px;box-sizing:border-box;display:flex;gap:2px;align-items:flex-end;padding:3px 8px 0;background:#dfe4e8;border-bottom:1px solid #9aa3aa}
+  #shTabs button{border:1px solid #9aa3aa;border-bottom:none;border-radius:5px 5px 0 0;background:#eef1f3;padding:3px 12px;font:inherit;cursor:pointer}
+  #shTabs button.on{background:#fff;font-weight:600;color:#1a6b3c}
+  #shTabs .note{margin-left:10px;padding-bottom:4px}
+  table.sh{border-collapse:collapse;font:12px Arial,Helvetica,sans-serif}
+  table.sh th{position:sticky;top:30px;z-index:3;background:#d9dee3;border:1px solid #b9c0c6;text-align:left;vertical-align:top;padding:4px 6px;white-space:normal;min-width:44px;max-width:140px;cursor:pointer}
+  table.sh td{border:1px solid #e3e3e3;padding:2px 6px;white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis;background:#fff}
+  table.sh td.n{text-align:right} table.sh td.addr, table.sh th.addr{position:sticky;left:0} table.sh td.addr{z-index:2;font-weight:600;border-right:2px solid #9aa3aa} table.sh th.addr{z-index:4;border-right:2px solid #9aa3aa}
+  table.sh tr.stripe td{background:#f6f8fa} table.sh tr.hrow:hover td{background:#fff7d6}
+  table.sh tr.grp td{background:#1f5f8b;color:#fff;font-weight:700;cursor:pointer;position:sticky;left:0}
+  table.sh tr.tot td{font-weight:700;border-top:2px solid #555}
+  table.sh.notes td{white-space:normal;max-width:900px;vertical-align:top}
   .cdot{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #999;vertical-align:middle}
   table.cmp{border-collapse:collapse}
   table.cmp th,table.cmp td{border:1px solid var(--line);padding:4px 8px;vertical-align:top;white-space:nowrap}
@@ -65,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r13</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r14</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -151,7 +164,7 @@
 <div id="homes">
   <div id="homesBar">
     <b>Homes</b> <span id="hCount" class="note"></span>
-    <button id="hList" class="primary">List</button><button id="hCompare">Compare (<span id="hSelN">0</span>)</button><button id="hClear">Clear picks</button>
+    <button id="hList" class="primary">List</button><button id="hCompare">Compare (<span id="hSelN">0</span>)</button><button id="hSheet" title="Same layout as Naples_Listings_r2.xlsx">Spreadsheet</button><button id="hClear">Clear picks</button><button id="hFull" title="Hide the map and give this panel the whole window">⤢ Full</button>
     <span class="note">|</span>
     <label>Price $<input type="number" id="fPmin" placeholder="min" step="10000"></label><label>– $<input type="number" id="fPmax" placeholder="max" step="10000"></label>
     <label>Beds ≥<input type="number" id="fBeds" min="0" step="1" style="width:48px"></label>
@@ -747,9 +760,10 @@ function hRow(h){ const id=h.url; const pc=ppsf(h), ac=acres(h);
   <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td>${h.tax!=null?money(h.tax):''}</td><td>${esc(h.water||'')}</td><td>${esc(h.sewer||'')}</td><td>${esc(h.storm||'')}</td><td>${esc(h.pool||'')}</td><td>${h.elevFt??''}</td><td>${h.walMi??''}</td><td>${h.hospMi??''}</td><td>${esc(h.subdivision||'')}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
 function renderHomes(){
   const rows=hFiltered(); $('hCount').textContent = LST? `${rows.length} of ${LST.rows.length} homes` : ''; $('hSelN').textContent=SEL.size;
-  $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare');
+  $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare'); $('hSheet').classList.toggle('primary',HVIEW==='sheet');
   if(!LST){ return; }
   if(HVIEW==='compare') return renderCompare();
+  if(HVIEW==='sheet') return renderSheet(rows);
   const groups={}; rows.forEach(h=>(groups[h.exit]=groups[h.exit]||[]).push(h));
   const keys=Object.keys(groups).sort((a,b)=>(parseInt(b.match(/\d+/))||0)-(parseInt(a.match(/\d+/))||0));
   const k=HSORT.k, d=HSORT.dir;
@@ -784,18 +798,94 @@ function renderCompare(){
     t+=`<tr><th>${lab}</th>`+hs.map(h=>`<td class="${best!=null&&score(h)===best?'best':''}">${f(h)}</td>`).join('')+'</tr>'; }
   $('homesBody').innerHTML=t+'</table><div class="note" style="padding:6px">Green = best in that row.</div>';
 }
+
+/* ================= SPREADSHEET VIEW (same tabs, columns and order as Naples_Listings_r2.xlsx) ================= */
+let SHTAB='sec', SHSORT=null;
+const CLS_FILL={A:'#C8E6C9',B:'#BBDEFB',S:'#E1BEE7',C:'#E0E0E0'}, CLS_ORD={A:0,B:1,S:2,C:3};
+const ivv = v => (v!=null&&v!==''&&/^\d+(\.\d+)?$/.test(String(v)))? Math.trunc(+v) : null;
+const SC=[['I-75 Section',h=>h.exit],['Exit #',h=>h.exitRef],['Class',h=>CLS_NAME[h.cls]],['Status',h=>h.status],
+ ['Address',h=>h.addr],['City',h=>h.city],['ZIP',h=>h.zip],['County',h=>h.county],['Subdivision',h=>h.subdivision],
+ ['Price',h=>h.price,'usd'],['$/Sq Ft',h=>ppsf(h),'usd'],['Beds',h=>h.beds],['Baths',h=>h.baths],['Full Baths',h=>h.fullBaths],['Half Baths',h=>h.halfBaths],
+ ['Sq Ft',h=>h.sqft,'int'],['Lot (acres)',h=>acres(h),'d2'],['Year Built',h=>ivv(h.year)],['Stories',h=>h.stories],['Garage',h=>h.garage],['Parking Detail',h=>h.parking],
+ ['Type',h=>h.type],['New Construction',h=>h.newBuild],['Builder',h=>h.builder],['HOA / Fee / Notes',h=>h.feeNote],['CDD',h=>h.cdd],
+ ['Annual Tax',h=>h.tax,'usd'],['Tax Year',h=>h.taxYear],['Water',h=>h.water],['Sewer',h=>h.sewer],['Roof',h=>h.roof],['Roof Year (from remarks)',h=>h.roofYear],
+ ['Construction',h=>h.construction],['Storm Protection',h=>h.storm],['Cooling',h=>h.cooling],['Pool',h=>h.pool],['Waterfront / View',h=>h.waterView],
+ ['Flood Zone (FEMA)',h=>h.flood],['Evac Zone',h=>h.evac],['Elevation (ft)',h=>h.elevFt,'d1'],['Miles to Gulf (approx)',h=>h.coastMi,'d1'],
+ ['Flood Risk 1-10',h=>h.riskFlood],['Fire Risk 1-10',h=>h.riskFire],['Heat Risk 1-10',h=>h.riskHeat],
+ ['Days on Market',h=>ivv(h.dom)],['Original List Price',h=>h.origListPrice,'usd'],['Price Changes',h=>h.priceChanges],['Last Sold Price',h=>h.lastSoldPrice,'usd'],['Last Sold Date',h=>h.lastSoldDate],
+ ['Redfin Estimate',h=>h.redfinEst,'usd'],['Price History',h=>h.priceHistory],
+ ['Miles to I-75 Exit',h=>h.exitMi,'d1'],['Miles to Walmart',h=>h.walMi,'d1'],['Nearest Walmart',h=>h.walName],['Miles to Grocery',h=>h.grocMi,'d1'],['Nearest Grocery',h=>h.grocName],
+ ['Miles to Hospital',h=>h.hospMi,'d1'],['Nearest Hospital',h=>h.hospName],["Miles to Costco/Sam's",h=>h.clubMi,'d1'],["Nearest Costco/Sam's",h=>h.clubName],
+ ['School Avg (GreatSchools)',h=>h.schoolAvg,'d1'],['Schools',h=>h.schools],['Listing Agent',h=>h.agent],['MLS #',h=>h.mls],['Description',h=>h.desc],['Redfin Link',null]];
+const SH_NOTES=[['Pulled','Listings and listing details are from Redfin, pulled on the dates shown in the left panel. Checked against the Naples Home Search Map conditions.'],
+ ['Class A','Over 0.5 acre, built 2017+, 2+ bed / 2+ bath, garage, under $450,000, no HOA'],['Class B','Over 0.25 acre, built 2002+, 2+ bed / 2+ bath, garage, under $450,000, no HOA'],
+ ['Stretch','Built 2002+, 2+ bed / 2+ bath, garage, under $500,000, no HOA, but lot size or price misses A/B'],['Class C','2+ bed / 1+ bath, under $350,000, no HOA (mobile homes with a park/shared fee allowed and noted)'],
+ ['Blank cells','Blank means the listing did not state it. It does not mean "no".'],
+ ['Annual Tax','Latest county tax bill on Redfin (see Tax Year). For new builds this is often the vacant-lot tax and will rise after completion. Assessed value is not published on Redfin.'],
+ ['CDD','Only filled when the listing text mentions a CDD. "No CDD" = listing says so. Blank = not mentioned; confirm before an offer.'],
+ ['Water / Sewer / Roof / Construction / Cooling',"Read from the listing's features list."],['Roof Year',"Only when the agent's remarks state a roof year. A/C age is not published."],
+ ['Storm Protection / Pool / Waterfront','Keyword read of the features list and remarks. Verify on the listing.'],['Builder','Builder name found in the remarks of new-construction listings; not always present.'],
+ ['Risk scores','First Street scores shown on Redfin, 1 (minimal) to 10 (extreme). Wind score was not available for these listings.'],
+ ['Flood Zone / Evac Zone',"From the map: FEMA flood layer and Florida evacuation zones at the home's location."],['Elevation',"USGS elevation at the home's map point, in feet."],
+ ['Miles to Gulf','Straight-line distance to the approximate Gulf shoreline (not bays or rivers).'],['Miles to stores / hospital','Straight-line. Grocery = Walmart, Publix or Winn-Dixie. Hospital = general hospitals only.'],
+ ['School Avg','Average GreatSchools rating (1-10) of the schools Redfin lists as serving the home.'],['Garage','"verify" = listing did not say.'],['$/Sq Ft','Price ÷ Sq Ft'],
+ ['On this page','The filters in the bar above act like spreadsheet filters on every tab. Click a column heading on All Homes to sort. Click a row to show that home on the map.']];
+function shFmt(v,f){ if(v==null||v==='') return ''; if(f==='usd') return '$'+Math.round(v).toLocaleString(); if(f==='int') return Math.round(v).toLocaleString(); if(f==='d2') return (+v).toFixed(2); if(f==='d1') return (+v).toFixed(1); return esc(String(v)); }
+function shCells(h,from){ let t='';
+  for(let i=from;i<SC.length;i++){ const [lab,g,f]=SC[i];
+    if(!g){ t+=`<td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin</a></td>`; continue; }
+    const v=g(h), num=typeof v==='number'; let cl=num?'n':'', st='';
+    if(lab==='Class') st=` style="background:${CLS_FILL[h.cls]}"`; if(lab==='Address') cl='addr';
+    const long = (lab==='Description'||lab==='Price History'||lab==='Schools'||lab==='Parking Detail') && v ? ` title="${esc(String(v))}"` : '';
+    t+=`<td${cl?` class="${cl}"`:''}${st}${long}>${shFmt(v,f)}</td>`; }
+  return t; }
+const median = a => { if(!a.length) return null; a=[...a].sort((x,y)=>x-y); const m=a.length>>1; return a.length%2? a[m] : (a[m-1]+a[m])/2; };
+function renderSheet(rows){
+  const base=[...rows].sort((a,b)=> (b.exitRef-a.exitRef) || (CLS_ORD[a.cls]-CLS_ORD[b.cls]) || (a.price-b.price));
+  const exits=[]; base.forEach(h=>{ if(!exits.includes(h.exit)) exits.push(h.exit); });
+  const tabs=[['sec','By I-75 Section'],['sum','Summary'],['all','All Homes'],['notes','Column Notes']];
+  let t='<div id="shTabs">'+tabs.map(([k,l])=>`<button data-t="${k}" class="${SHTAB===k?'on':''}">${l}</button>`).join('')+`<span class="note">${rows.length} homes · ${SC.length} columns · same layout as Naples_Listings_r2.xlsx</span></div>`;
+  const head=(from)=>'<tr>'+SC.slice(from).map(([l],j)=>{ const i=j+from, s=SHTAB==='all'&&SHSORT&&SHSORT.i===i?(SHSORT.dir>0?' ▲':' ▼'):''; return `<th${SHTAB==='all'?` data-s="${i}"`:''}${l==='Address'?' class="addr"':''}>${esc(l)}${s}</th>`; }).join('')+'</tr>';
+  if(!rows.length && SHTAB!=='notes'){ $('homesBody').innerHTML=t+'<div class="note" style="padding:10px">No homes match these filters.</div>'; return; }
+  if(SHTAB==='sec'){
+    t+='<table class="sh">'+head(2);
+    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c={A:0,B:0,S:0,C:0}; grp.forEach(h=>c[h.cls]++);
+      t+=`<tr class="grp" data-g="${esc(e)}"><td colspan="${SC.length-2}">${COLLAPSED.has(e)?'▸':'▾'} ${esc(e)} — ${grp.length} homes  (A ${c.A} · B ${c.B} · Stretch ${c.S} · C ${c.C})</td></tr>`;
+      if(!COLLAPSED.has(e)) t+=grp.map(h=>`<tr class="hrow" data-id="${esc(h.url)}">${shCells(h,2)}</tr>`).join(''); }
+    t+='</table>';
+  } else if(SHTAB==='all'){
+    let list=base; if(SHSORT&&SC[SHSORT.i][1]){ const g=SC[SHSORT.i][1], d=SHSORT.dir; const blank=v=>v==null||v==='';
+      list=[...base].sort((a,b)=>{ const x=g(a),y=g(b); if(blank(x)||blank(y)) return blank(x)-blank(y); return (x>y?1:x<y?-1:0)*d; }); }
+    t+='<table class="sh">'+head(0)+list.map((h,i)=>`<tr class="hrow${i%2?' stripe':''}" data-id="${esc(h.url)}">${shCells(h,0)}</tr>`).join('')+'</table>';
+  } else if(SHTAB==='sum'){
+    t+='<table class="sh"><tr>'+['I-75 Section','Class A','Class B','Stretch','Class C','Total','Lowest price','Median price','Median annual tax'].map(x=>`<th style="max-width:none;cursor:default">${x}</th>`).join('')+'</tr>';
+    const T={A:0,B:0,S:0,C:0};
+    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c={A:0,B:0,S:0,C:0}; grp.forEach(h=>{c[h.cls]++; T[h.cls]++;});
+      const tx=grp.map(h=>h.tax).filter(v=>typeof v==='number');
+      t+=`<tr><td>${esc(e)}</td><td class="n">${c.A}</td><td class="n">${c.B}</td><td class="n">${c.S}</td><td class="n">${c.C}</td><td class="n"><b>${grp.length}</b></td><td class="n">${shFmt(Math.min(...grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(tx),'usd')}</td></tr>`; }
+    t+=`<tr class="tot"><td>Total</td><td class="n">${T.A}</td><td class="n">${T.B}</td><td class="n">${T.S}</td><td class="n">${T.C}</td><td class="n">${base.length}</td><td></td><td></td><td></td></tr></table>`;
+  } else {
+    t+='<table class="sh notes">'+SH_NOTES.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td>${esc(v)}</td></tr>`).join('')+'</table>';
+  }
+  $('homesBody').innerHTML=t;
+}
 function zoomTo(id){ const h=LST.rows.find(r=>r.url===id); if(!h) return; map.setView([h.lat,h.lon], Math.max(map.getZoom(),15));
   const l=PIN[id]; if(l) setTimeout(()=>l.openPopup(),250); else L.popup({maxWidth:340}).setLatLng([h.lat,h.lon]).setContent(lstPopup(h)).openOn(map); }
 $('homesBody').addEventListener('click', e=>{
+  const tb=e.target.closest('#shTabs button'); if(tb){ SHTAB=tb.dataset.t; return renderHomes(); }
+  const sth=e.target.closest('th[data-s]'); if(sth){ const i=+sth.dataset.s; SHSORT = SHSORT&&SHSORT.i===i? {i,dir:-SHSORT.dir} : {i,dir:1}; return renderHomes(); }
   const th=e.target.closest('th[data-k]'); if(th){ const k=th.dataset.k; if(k==='pick'||k==='link') return; HSORT = HSORT.k===k? {k,dir:-HSORT.dir} : {k,dir:1}; return renderHomes(); }
   const g=e.target.closest('tr.grp'); if(g){ const k=g.dataset.g; COLLAPSED.has(k)?COLLAPSED.delete(k):COLLAPSED.add(k); return renderHomes(); }
   const z=e.target.closest('a.zoom'); if(z){ e.preventDefault(); return zoomTo(z.dataset.id); }
   const u=e.target.closest('a.unpick'); if(u){ e.preventDefault(); SEL.delete(u.dataset.id); renderListings(); return renderHomes(); }
   const tr=e.target.closest('tr.hrow'); if(!tr || e.target.tagName==='A') return;
   if(e.target.classList.contains('pk')){ e.target.checked?SEL.add(tr.dataset.id):SEL.delete(tr.dataset.id); tr.classList.toggle('sel',e.target.checked); $('hSelN').textContent=SEL.size; renderListings(); return; }
+  if($('right').classList.contains('full')) $('hFull').click();
   zoomTo(tr.dataset.id);
 });
 $('hList').onclick=()=>{HVIEW='list'; renderHomes();}; $('hCompare').onclick=()=>{HVIEW='compare'; renderHomes();};
+$('hSheet').onclick=()=>{HVIEW='sheet'; renderHomes();};
+$('hFull').onclick=()=>{ const f=$('right').classList.toggle('full'); $('hFull').textContent=f?'⤡ Show map':'⤢ Full'; if(f) $('homes').classList.remove('min'); setTimeout(()=>map.invalidateSize(),50); };
 $('hClear').onclick=()=>{SEL.clear(); renderListings(); renderHomes();};
 $('hMin').onclick=()=>{ $('homes').classList.toggle('min'); $('hMin').textContent=$('homes').classList.contains('min')?'▴':'▾'; setTimeout(()=>map.invalidateSize(),50); };
 ['fPmin','fPmax','fBeds','fBaths','fSqft','fLot','fYear','fDom'].forEach(id=>$(id).addEventListener('input',renderHomes));
