@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r11</title>
+<title>Naples Home Search Map r12</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -25,10 +25,10 @@
   #homesBar label{white-space:nowrap}
   #homesBody{flex:1;overflow:auto}
   table.ht{border-collapse:collapse;width:100%}
-  table.ht th{position:sticky;top:0;background:#f7f7f5;border-bottom:1px solid var(--line);text-align:left;padding:4px 6px;cursor:pointer;white-space:nowrap}
+  table.ht th{position:sticky;top:0;z-index:2;background:#f7f7f5;border-bottom:1px solid var(--line);text-align:left;padding:4px 6px;cursor:pointer;white-space:nowrap}
   table.ht td{padding:3px 6px;border-bottom:1px solid #eee;white-space:nowrap}
   table.ht tr.grp td{background:#1f5f8b;color:#fff;font-weight:600;cursor:pointer}
-  table.ht tr.row:hover td{background:#fff7d6}
+  table.ht tr.hrow:hover td{background:#fff7d6}
   table.ht tr.sel td{background:#e3f1ff}
   .cdot{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #999;vertical-align:middle}
   table.cmp{border-collapse:collapse}
@@ -65,7 +65,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r11</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r12</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -741,7 +741,7 @@ const COLS=[['pick',''],['cls','Class'],['addr','Address'],['price','Price'],['p
   ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['link','Redfin']];
 function sortVal(h,k){ return k==='ppsf'?ppsf(h): k==='lot'?acres(h): k==='garage'?garN(h): k==='dom'?+h.dom: k==='status'?status(h): k==='fee'?(h.feeNote||''): h[k]; }
 function hRow(h){ const id=h.url; const pc=ppsf(h), ac=acres(h);
-  return `<tr class="row${SEL.has(id)?' sel':''}" data-id="${esc(id)}"><td><input type="checkbox" class="pk" ${SEL.has(id)?'checked':''}></td>
+  return `<tr class="hrow${SEL.has(id)?' sel':''}" data-id="${esc(id)}"><td><input type="checkbox" class="pk" ${SEL.has(id)?'checked':''}></td>
   <td><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${CLS_NAME[h.cls]}</td><td>${esc(h.addr)}, ${esc(h.city)}</td><td>${money(h.price)}</td><td>${pc?'$'+Math.round(pc):'—'}</td>
   <td>${h.beds}</td><td>${h.baths}</td><td>${h.sqft?Math.round(h.sqft).toLocaleString():'—'}</td><td>${ac?ac.toFixed(2):'—'}</td><td>${h.year||'—'}</td><td>${esc(h.garage||'—')}</td><td>${esc(h.type)}</td>
   <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
@@ -782,7 +782,7 @@ $('homesBody').addEventListener('click', e=>{
   const g=e.target.closest('tr.grp'); if(g){ const k=g.dataset.g; COLLAPSED.has(k)?COLLAPSED.delete(k):COLLAPSED.add(k); return renderHomes(); }
   const z=e.target.closest('a.zoom'); if(z){ e.preventDefault(); return zoomTo(z.dataset.id); }
   const u=e.target.closest('a.unpick'); if(u){ e.preventDefault(); SEL.delete(u.dataset.id); renderListings(); return renderHomes(); }
-  const tr=e.target.closest('tr.row'); if(!tr || e.target.tagName==='A') return;
+  const tr=e.target.closest('tr.hrow'); if(!tr || e.target.tagName==='A') return;
   if(e.target.classList.contains('pk')){ e.target.checked?SEL.add(tr.dataset.id):SEL.delete(tr.dataset.id); tr.classList.toggle('sel',e.target.checked); $('hSelN').textContent=SEL.size; renderListings(); return; }
   zoomTo(tr.dataset.id);
 });
