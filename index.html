@@ -72,13 +72,14 @@
   #addr{width:100%;padding:5px;border:1px solid var(--line);border-radius:4px}
   .pop td{padding:1px 6px 1px 0;vertical-align:top}
   .note{font-size:11.5px;color:var(--mute)}
+  .lcls{display:flex;gap:7px;align-items:flex-start;margin:5px 0;cursor:pointer} .lcls input{margin-top:3px} .lcls .sw{display:inline-block;margin-top:3px} .lcn{line-height:1.25} .lcc{font-weight:600;color:#333}
   #busy{position:absolute;z-index:1000;top:10px;left:50%;transform:translateX(-50%);background:#1d2327;color:#fff;padding:6px 12px;border-radius:14px;font-size:12px;display:none}
 </style>
 </head>
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r24</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r25</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
 <div id="mvStatus">  <div class="status" id="status"></div>
@@ -133,7 +134,7 @@
   <div id="lstInfo" class="note"></div>
   <div id="lstWarn" class="bad" style="font-weight:600;margin:4px 0">⚠ No homes loaded yet — choose Naples_Listings_r2.json above to see home markers.</div>
   <div class="btns"><button id="btnClsDlg" class="primary">⚙ Classes &amp; settings</button></div>
-  <div class="row" id="lstClasses" style="flex-wrap:wrap"></div>
+  <div id="lstClasses"></div>
   <div class="row"><label>I-75 exit</label><select id="lstExit"><option value="">All exits</option></select></div>
   <div class="row"><label><input type="checkbox" id="lstGarageOnly"> Hide homes without a confirmed garage (Class C exempt)</label></div>
 
@@ -750,6 +751,7 @@ function renderListings(){
   }
   if(typeof renderHomes==='function') renderHomes();
   $('lstWarn').style.display='none';
+  document.querySelectorAll('#lstClasses [data-lc]').forEach(e=>{ const k=e.dataset.lc; e.textContent='· '+(cnt[k]||0)+' shown'; });
   $('lstInfo').innerHTML = `${esc(LST.name||'listings')} · pulled ${esc(LST.generated||'?')} · showing ${n}: ${cntStr(cnt,', ')}${cnt.X?', no class '+cnt.X:''}`;
 }
 function useListings(obj, save){
@@ -1020,7 +1022,8 @@ function syncClsMaps(){
   CLS_COLOR.X='#adb5bd'; CLS_NAME.X='No class'; CLS_FILL.X='#FFFFFF'; CLS_ORD.X=99; }
 syncClsMaps();
 function buildLeftChecks(){ const box=$('lstClasses'), was={}; box.querySelectorAll('input[data-c]').forEach(i=>was[i.dataset.c]=i.checked);
-  box.innerHTML=[...clsKeys(),'X'].map(k=>`<label><input type="checkbox" data-c="${k}"${(k in was?was[k]:k!=='X')?' checked':''}> <span class="sw" style="display:inline-block;background:${CLS_COLOR[k]}"></span> ${esc(k==='X'?'No class':clsShort(k))}</label>`).join(''); }
+  box.innerHTML=[...clsKeys(),'X'].map(k=>{ const d=k==='X'?null:CLS_DEF[k], desc=k==='X'?'Fits none of the classes (hidden unless ticked).':(d.on?(d.desc||clsDesc(k)):'(class switched off)');
+    return `<label class="lcls"><input type="checkbox" data-c="${k}"${(k in was?was[k]:k!=='X')?' checked':''}><span class="sw" style="background:${CLS_COLOR[k]}"></span><span class="lcn"><b>${esc(k==='X'?'No class':CLS_NAME[k])}</b> <span class="lcc" data-lc="${k}"></span><br><span class="note">${esc(desc)}</span></span></label>`; }).join(''); }
 buildLeftChecks();
 const money0 = v => v==null?'':'$'+Math.round(v).toLocaleString();
 function clsDesc(k){ const d=CLS_DEF[k]; if(!d.on) return '(switched off)';
