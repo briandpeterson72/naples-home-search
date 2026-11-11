@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r18</title>
+<title>Naples Home Search Map r19</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -78,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r18</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r19</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -258,6 +258,17 @@ const fromPx = (x,y) => [iLon(G.x0+x*G.px), iLat(G.y0-y*G.px)]; // [lon,lat]
 const kmPerPx = lat => G.px*Math.cos(lat*D2R)/1000;
 const milesToPx = (mi,lat) => mi*1.609344/kmPerPx(lat);
 function expand(b,d){ return {S:b.S-d, W:b.W-d, N:b.N+d, E:b.E+d}; }
+
+/* ---- info popups for store / hospital / Costco / Amazon pins, and Street View links ---- */
+const svLink = (lat,lon) => `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${(+lat).toFixed(6)},${(+lon).toFixed(6)}`;
+const svA = (lat,lon) => `<a href="${svLink(lat,lon)}" target="_blank" rel="noopener">Street View ↗</a>`;
+const mapsA = (lat,lon) => `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank" rel="noopener">Google Maps ↗</a>`;
+const dirA = (lat,lon) => `<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}" target="_blank" rel="noopener">Directions ↗</a>`;
+function poiPopup(p,kind){
+  const rows=[['Type',kind],['Address',p.ad?esc(p.ad):`<span class="fa-addr" data-lat="${p.lat}" data-lon="${p.lon}">looking up…</span>`],p.op?['Operator',esc(p.op)]:null,p.hrs?['Hours',esc(p.hrs)]:null,p.ph?['Phone',esc(p.ph)]:null,p.er==='yes'?['Emergency','Has an emergency department (per OpenStreetMap)']:null].filter(Boolean);
+  const q=encodeURIComponent(p.name+' '+(p.city||'Florida')+' hours');
+  return `<b>${esc(p.name)}</b><table class="pop">${rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table><div style="margin-top:4px">${[p.w?`<a href="${encodeURI(p.w)}" target="_blank" rel="noopener">Website ↗</a>`:'',mapsA(p.lat,p.lon),svA(p.lat,p.lon),dirA(p.lat,p.lon),`<a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">Search hours ↗</a>`].filter(Boolean).join(' · ')}</div><div class="note">Source: OpenStreetMap (snapshot). Hours/phone may be missing; use the links to confirm.</div>`; }
+const POP = (m,p,kind) => m.bindPopup(()=>poiPopup(p,kind),{maxWidth:340});
 function hav(lat1,lon1,lat2,lon2){ // miles
   const dLat=(lat2-lat1)*D2R, dLon=(lon2-lon1)*D2R;
   const a=Math.sin(dLat/2)**2+Math.cos(lat1*D2R)*Math.cos(lat2*D2R)*Math.sin(dLon/2)**2;
@@ -336,6 +347,8 @@ function classifyPOIs(elements){
   const grocery=[], groceryAny=[], walmart=[], hospital=[], club=[], clubPlanned=[], bjs=[], amazon=[], amzLocker=[];
   for(const el of elements||[]){ const t=el.tags||{}; const lat=el.lat??el.center?.lat, lon=el.lon??el.center?.lon; if(lat==null) continue;
     const p={lat:+lat.toFixed(5), lon:+lon.toFixed(5), name:t.name||t.brand||'(unnamed)', city:t['addr:city']||''};
+    p.id=(el.type||'n')[0]+el.id; const _a=[t['addr:housenumber'],t['addr:street']].filter(Boolean).join(' '); p.ad=[_a,t['addr:city'],t['addr:postcode']].filter(Boolean).join(', ');
+    { const w=t.website||t['contact:website']||t.url; if(w) p.w=/^https?:/.test(w)?w:'https://'+w; } if(t.phone||t['contact:phone']) p.ph=(t.phone||t['contact:phone']).split(';')[0]; if(t.opening_hours) p.hrs=t.opening_hours; if(t.operator) p.op=t.operator; if(t.emergency) p.er=t.emergency;
     const nm=(t.name||'')+' '+(t.brand||'');
     const anm = nm+' '+(t.operator||'');
     if(/amazon/i.test(anm)){
@@ -464,7 +477,9 @@ $('basemap').onchange = e => { map.removeLayer(curBase); curBase = BASE[e.target
 map.createPane('rasters'); map.getPane('rasters').style.zIndex = 350;
 map.createPane('sweet');   map.getPane('sweet').style.zIndex = 420;
 map.getPane('rasters').style.pointerEvents = 'none'; map.getPane('sweet').style.pointerEvents = 'none';   // shading never blocks clicks
-map.createPane('listingsPane'); map.getPane('listingsPane').style.zIndex = 650;                           // pins above all shading
+map.createPane('listingsPane'); map.getPane('listingsPane').style.zIndex = 650;
+const LST_RENDERER = L.canvas({pane:'listingsPane', tolerance:4});   // ONE canvas shared by home pins and info pins so every pin is clickable
+map.createPane('infoPane'); map.getPane('infoPane').style.zIndex = 655; map.getPane('tooltipPane').style.zIndex = 690;   // store/hospital/fishing pins must sit above the listings canvas to be clickable                           // pins above all shading
 
 const LAYERS = [
   {k:'sweet',   label:'Sweet spot (meets everything)', color:'#1f8a4c', on:true},
@@ -608,13 +623,13 @@ function render(){
     r.us41.forEach(l=>LG.roads.addLayer(L.polyline(l,{color:'#c0392b',weight:4,opacity:.9}).bindTooltip('US-41 (counted)'))); }
   // POIs
   LG.poiClub.clearLayers(); LG.poiHosp.clearLayers(); LG.poiGroc.clearLayers(); LG.poiWal.clearLayers(); LG.poiAmz.clearLayers();
-  if(r.wal) r.wal.forEach(p=>LG.poiWal.addLayer(L.circleMarker([p.lat,p.lon],{radius:7,color:'#111',weight:3,fillColor:'#0071ce',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:''))));
-  if(D.pois&&D.pois.amazon) D.pois.amazon.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{radius:9,color:'#232f3e',weight:2,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:''))));
-  if(D.pois&&D.pois.amzLocker) D.pois.amzLocker.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{radius:4,color:'#232f3e',weight:1,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name)));
-  if(r.club) r.club.forEach(p=>{ LG.poiClub.addLayer(L.circleMarker([p.lat,p.lon],{radius:8,color:'#111',weight:3,fillColor:'#e67e22',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')));
+  if(r.wal) r.wal.forEach(p=>LG.poiWal.addLayer(L.circleMarker([p.lat,p.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:7,color:'#111',weight:3,fillColor:'#0071ce',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')).bindPopup(()=>poiPopup(p,'Walmart'),{maxWidth:340})));
+  if(D.pois&&D.pois.amazon) D.pois.amazon.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:9,color:'#232f3e',weight:2,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')).bindPopup(()=>poiPopup(p,'Amazon facility (info only)'),{maxWidth:340})));
+  if(D.pois&&D.pois.amzLocker) D.pois.amzLocker.forEach(p=>LG.poiAmz.addLayer(L.circleMarker([p.lat,p.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:4,color:'#232f3e',weight:1,fillColor:'#ff9900',fillOpacity:1}).bindTooltip(p.name).bindPopup(()=>poiPopup(p,'Amazon Hub Locker (info only)'),{maxWidth:340})));
+  if(r.club) r.club.forEach(p=>{ LG.poiClub.addLayer(L.circleMarker([p.lat,p.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:8,color:'#111',weight:3,fillColor:'#e67e22',fillOpacity:1}).bindTooltip(p.name+(p.city?' — '+p.city:'')).bindPopup(()=>poiPopup(p,"Costco / Sam's Club"),{maxWidth:340}));
     LG.poiClub.addLayer(L.circle([p.lat,p.lon],{radius:s.rClub*1609.344,color:'#e67e22',weight:1,dashArray:'4 4',fill:false,interactive:false})); });
-  if(r.hosp) r.hosp.forEach(p=>LG.poiHosp.addLayer(L.circleMarker([p.lat,p.lon],{radius:7,color:'#111',weight:3,fillColor:'#c0392b',fillOpacity:1}).bindTooltip(p.name)));
-  if(r.groc) r.groc.forEach(p=>LG.poiGroc.addLayer(L.circleMarker([p.lat,p.lon],{radius:5,color:'#111',weight:2.5,fillColor:'#2e7d32',fillOpacity:1}).bindTooltip(p.name)));
+  if(r.hosp) r.hosp.forEach(p=>LG.poiHosp.addLayer(L.circleMarker([p.lat,p.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:7,color:'#111',weight:3,fillColor:'#c0392b',fillOpacity:1}).bindTooltip(p.name).bindPopup(()=>poiPopup(p,'Hospital'),{maxWidth:340})));
+  if(r.groc) r.groc.forEach(p=>LG.poiGroc.addLayer(L.circleMarker([p.lat,p.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:5,color:'#111',weight:2.5,fillColor:'#2e7d32',fillOpacity:1}).bindTooltip(p.name).bindPopup(()=>poiPopup(p,'Grocery (Walmart / Publix / Winn-Dixie)'),{maxWidth:340})));
   // boundary
   LG.bound.clearLayers();
   const bl = boundaryPoly ? boundaryPoly.map(p=>[p[1],p[0]]) : [[CFG.bounds.S,CFG.bounds.W],[CFG.bounds.S,CFG.bounds.E],[CFG.bounds.N,CFG.bounds.E],[CFG.bounds.N,CFG.bounds.W]];
@@ -649,7 +664,7 @@ function evaluatePoint(lat, lon){
     <div class="note">Confirm on FEMA's flood map and the county's evacuation-zone lookup before you buy.</div>`;
 }
 map.on('click', e=>{ if(map.pm && map.pm.globalDrawModeEnabled && map.pm.globalDrawModeEnabled()) return;
-  L.popup({maxWidth:360}).setLatLng(e.latlng).setContent(evaluatePoint(e.latlng.lat, e.latlng.lng)).openOn(map); });
+  L.popup({maxWidth:360}).setLatLng(e.latlng).setContent(evaluatePoint(e.latlng.lat, e.latlng.lng)+`<div style="margin-top:4px">${svA(e.latlng.lat,e.latlng.lng)} · ${mapsA(e.latlng.lat.toFixed(6),e.latlng.lng.toFixed(6))}</div>`).openOn(map); });
 
 $('addr').addEventListener('keydown', async e=>{
   if(e.key!=='Enter') return; const q=e.target.value.trim(); if(!q) return;
@@ -661,7 +676,7 @@ $('addr').addEventListener('keydown', async e=>{
     const j = (jr.candidates||[]).map(c=>({lat:c.location.y, lon:c.location.x, display_name:c.address}));
     if(!j.length){ busy(null); L.popup().setLatLng(map.getCenter()).setContent('Address not found. Try adding the city and "FL".').openOn(map); return; }
     const lat=+j[0].lat, lon=+j[0].lon; map.setView([lat,lon],13);
-    L.popup({maxWidth:360}).setLatLng([lat,lon]).setContent(`<b>${j[0].display_name.split(',').slice(0,3).join(',')}</b><br>`+evaluatePoint(lat,lon)).openOn(map);
+    L.popup({maxWidth:360}).setLatLng([lat,lon]).setContent(`<b>${j[0].display_name.split(',').slice(0,3).join(',')}</b><br>`+evaluatePoint(lat,lon)+`<div style="margin-top:4px">${svA(lat,lon)}</div>`).openOn(map);
   }catch(err){ L.popup().setLatLng(map.getCenter()).setContent('Address lookup failed: '+err.message).openOn(map); }
   busy(null);
 });
@@ -703,7 +718,7 @@ $('btnKmlDraw').onclick = ()=>{ const fc=LG.draw.toGeoJSON(); download(`Naples_M
 
 /* ================= LISTINGS (local file only) ================= */
 const CLS_COLOR={A:'#1b9e3a',B:'#2563eb',S:'#8e44ad',C:'#6b7280'}, CLS_NAME={A:'Class A',B:'Class B',S:'Stretch',C:'Class C'};
-let LST=null; const LST_RENDERER = L.canvas({pane:'listingsPane', tolerance:4});
+let LST=null;
 const money = v => v==null?'—':'$'+Math.round(v).toLocaleString();
 function lstPopup(h){
   const lotTxt = h.lot? (h.lot>=43560? (h.lot/43560).toFixed(2)+' ac' : Math.round(h.lot).toLocaleString()+' sq ft') : 'not listed';
@@ -714,7 +729,7 @@ function lstPopup(h){
    <tr><td>Year built</td><td>${h.year||'—'}</td></tr><tr><td>Garage</td><td>${esc(h.garage||'—')}</td></tr>
    <tr><td>I-75 exit</td><td>${esc(h.exit)} (${h.exitMi} mi)</td></tr><tr><td>Flood zone</td><td>${esc(h.flood||'—')}</td></tr><tr><td>Evacuation</td><td>${esc(h.evac||'—')}</td></tr>
    <tr><td>Days on market</td><td>${esc(h.dom||'—')}</td></tr></table>
-   <a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin ↗</a> · <a href="#" onclick="SEL.has('${esc(h.url)}')?SEL.delete('${esc(h.url)}'):SEL.add('${esc(h.url)}');renderListings();return false;">Add / remove from Compare</a>`;
+   <a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin ↗</a> · ${svA(h.lat,h.lon)} · <a href="#" onclick="SEL.has('${esc(h.url)}')?SEL.delete('${esc(h.url)}'):SEL.add('${esc(h.url)}');renderListings();return false;">Add / remove from Compare</a>`;
 }
 function renderListings(){
   LG.listings.clearLayers(); for(const k in PIN) delete PIN[k]; if(!LST) return;
@@ -921,7 +936,7 @@ const gsearch = f => 'https://www.google.com/search?q='+encodeURIComponent(f.n+'
 const osmLink = f => `https://www.openstreetmap.org/${{n:'node',w:'way',r:'relation'}[f.id[0]]}/${f.id.slice(1)}`;
 const homesNear = (f,mi) => { if(!LST) return null; const c={A:0,B:0,S:0,C:0}; let n=0; for(const h of LST.rows){ if(hav(f.lat,f.lon,h.lat,h.lon)<=mi){ c[h.cls]++; n++; } } return {n,c}; };
 function fishLinks(f){ return [f.w?`<a href="${encodeURI(f.w)}" target="_blank" rel="noopener">Website ↗</a>`:'', f.wp?`<a href="${encodeURI(f.wp)}" target="_blank" rel="noopener">Wikipedia ↗</a>`:'',
-  `<a href="${gmap(f)}" target="_blank" rel="noopener">Google Maps ↗</a>`,`<a href="${gdir(f)}" target="_blank" rel="noopener">Directions ↗</a>`,`<a href="${gsearch(f)}" target="_blank" rel="noopener">Search hours/fees ↗</a>`,`<a href="${osmLink(f)}" target="_blank" rel="noopener">OpenStreetMap ↗</a>`].filter(Boolean).join(' · '); }
+  `<a href="${gmap(f)}" target="_blank" rel="noopener">Google Maps ↗</a>`,`<a href="${gdir(f)}" target="_blank" rel="noopener">Directions ↗</a>`,svA(f.lat,f.lon),`<a href="${gsearch(f)}" target="_blank" rel="noopener">Search hours/fees ↗</a>`,`<a href="${osmLink(f)}" target="_blank" rel="noopener">OpenStreetMap ↗</a>`].filter(Boolean).join(' · '); }
 function fishPopup(f){ const hn=homesNear(f,10);
   const rows=[['Type',FKIND(f)],['Address',f.ad?esc(f.ad):`<span class="fa-addr" data-lat="${f.lat}" data-lon="${f.lon}">looking up…</span>`],f.op?['Operator',esc(f.op)]:null,f.fee?['Fee',esc(f.fee)]:null,f.hrs?['Hours',esc(f.hrs)]:null,f.ph?['Phone',esc(f.ph)]:null,f.acc?['Access',esc(f.acc)]:null,f.d?['Notes',esc(f.d)]:null,
     hn?['Homes ≤10 mi',`${hn.n} (A ${hn.c.A} · B ${hn.c.B} · Stretch ${hn.c.S} · C ${hn.c.C})`]:null].filter(Boolean);
@@ -939,10 +954,10 @@ function renderFish(){
   if(!FISH) return;
   FISH.items.forEach(f=>{
     const tip=f.n+(f.s==='spot'?' (fishing spot)':f.s==='preserve'?' (preserve / protected area)':f.s==='beach'?' (beach)':'');
-    if(f.t==='pier') LG.fPier.addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('🎣','#ffd8a8')}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
-    else if(f.t==='ramp') (f.s==='unk'?LG.fRampU:LG.fRamp).addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('⚓',f.s==='unk'?'#dee2e6':'#99e9f2')}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
-    else if(f.t==='marina') LG.fMarina.addLayer(L.circleMarker([f.lat,f.lon],{radius:6,color:'#111',weight:2,fillColor:'#1c7ed6',fillOpacity:1}).bindTooltip(f.n+' (marina)').bindPopup(()=>fishPopup(f),{maxWidth:360}));
-    else if(f.t==='park') LG.fPark.addLayer(L.circleMarker([f.lat,f.lon],{radius:4.5,color:f.s==='beach'?'#a67c00':'#0b4f1c',weight:2.5,fillColor:f.s==='beach'?'#ffe066':'#ffffff',fillOpacity:1}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
+    if(f.t==='pier') LG.fPier.addLayer(L.marker([f.lat,f.lon],{pane:'infoPane',icon:FISH_ICON('🎣','#ffd8a8')}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
+    else if(f.t==='ramp') (f.s==='unk'?LG.fRampU:LG.fRamp).addLayer(L.marker([f.lat,f.lon],{pane:'infoPane',icon:FISH_ICON('⚓',f.s==='unk'?'#dee2e6':'#99e9f2')}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
+    else if(f.t==='marina') LG.fMarina.addLayer(L.circleMarker([f.lat,f.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:6,color:'#111',weight:2,fillColor:'#1c7ed6',fillOpacity:1}).bindTooltip(f.n+' (marina)').bindPopup(()=>fishPopup(f),{maxWidth:360}));
+    else if(f.t==='park') LG.fPark.addLayer(L.circleMarker([f.lat,f.lon],{pane:'listingsPane',renderer:LST_RENDERER,bubblingMouseEvents:false,radius:4.5,color:f.s==='beach'?'#a67c00':'#0b4f1c',weight:2.5,fillColor:f.s==='beach'?'#ffe066':'#ffffff',fillOpacity:1}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
   });
 }
 fetch('fishing.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{
@@ -988,7 +1003,7 @@ async function loadAll(force){
   ];
   await Promise.all(jobs.map(async ([k,fn,desc])=>{
     setStatus(k,'load','loading…');
-    try{ const res = await cached((k==='pois'?'v5-':'v4-')+k, fn, force); D[k]=res.data;  /* v4 = extended bounds */
+    try{ const res = await cached((k==='pois'?'v6-':'v4-')+k, fn, force); D[k]=res.data;  /* v4 = extended bounds */
       setStatus(k, (k==='evac'&&res.data.partial)?'warn':'ok', `${desc(res.data)} · ${res.cached?ageTxt(res.t):'downloaded'}`); }
     catch(e){ D[k]=null; setStatus(k,'bad', e.message||String(e)); }
   }));
