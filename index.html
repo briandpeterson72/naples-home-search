@@ -78,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r23</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r24</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
 <div id="mvStatus">  <div class="status" id="status"></div>
@@ -718,27 +718,35 @@ $('btnKmlDraw').onclick = ()=>{ const fc=LG.draw.toGeoJSON(); download(`Naples_M
 /* ================= LISTINGS (local file only) ================= */
 const CLS_COLOR={X:'#adb5bd'}, CLS_NAME={X:'No class'};
 let LST=null;
+let NOTES={}, NOTES_OK=false;
+async function loadNotes(){ try{ const r=await fetch('/api/notes',{cache:'no-store'}); if(!r.ok||!/json/.test(r.headers.get('content-type')||'')) return; NOTES=await r.json(); NOTES_OK=true; if(LST) LST.rows.forEach(h=>h.snote=(NOTES[h.url]||{}).text||''); if(typeof renderListings==='function'&&LST) renderListings(); }catch(e){} }
+window.saveNote=async i=>{ const h=LST.rows[i], t=document.getElementById('sn_'+i), m=document.getElementById('snm_'+i); try{ const r=await fetch('/api/notes',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({url:h.url,text:t.value})}); const j=await r.json(); if(!r.ok) throw new Error(j.error||r.status); if(t.value.trim()) NOTES[h.url]={text:t.value,by:j.by,t:Date.now()}; else delete NOTES[h.url]; h.snote=t.value.trim()?t.value:''; m.textContent='Saved ✓'; if(typeof renderHomes==='function') renderHomes(); }catch(e){ m.textContent='Not saved: '+e.message; } };
+const noteBox = h => { if(!NOTES_OK) return ''; const n=NOTES[h.url]||{}; return `<div style="margin-top:6px"><b>Team notes</b>${n.by?` <span class="note">last edit ${esc(n.by)}</span>`:''}<textarea id="sn_${h._i}" style="width:100%;box-sizing:border-box;min-height:54px">${esc(n.text||'')}</textarea><button onclick="saveNote(${h._i})">Save note</button> <span id="snm_${h._i}" class="note"></span></div>`; };
+const memb = h => (CLS_GLOBAL.overlap && h.all) ? (h.all.length?h.all:['X']) : [h.cls];
+const showIt = (h,on) => memb(h).some(k=>on.has(k));
+const clsLabel = h => memb(h).map(k=>CLS_NAME[k]).join(' + ');
+const dispCls = (h,on) => { const m=memb(h); return (on&&m.find(k=>on.has(k)))||m[0]; };
 const money = v => v==null?'—':'$'+Math.round(v).toLocaleString();
 function lstPopup(h){
   const lotTxt = h.lot? (h.lot>=43560? (h.lot/43560).toFixed(2)+' ac' : Math.round(h.lot).toLocaleString()+' sq ft') : 'not listed';
   return `<b>${esc(h.addr)}</b>, ${esc(h.city)} ${esc(h.zip)}<br>
-   <span style="color:${CLS_COLOR[h.cls]};font-weight:600">${CLS_NAME[h.cls]}</span> · ${h.type}${h.feeNote?' · '+esc(h.feeNote):''}<br>
+   <span style="color:${CLS_COLOR[h.cls]};font-weight:600">${esc(clsLabel(h))}</span> · ${h.type}${h.feeNote?' · '+esc(h.feeNote):''}<br>
    <table class="pop"><tr><td>Price</td><td>${money(h.price)}</td></tr><tr><td>Beds / baths</td><td>${h.beds} / ${h.baths}</td></tr>
    <tr><td>Home size</td><td>${h.sqft?Math.round(h.sqft).toLocaleString()+' sq ft':'—'}</td></tr><tr><td>Lot</td><td>${lotTxt}</td></tr>
    <tr><td>Year built</td><td>${h.year||'—'}</td></tr><tr><td>Garage</td><td>${esc(h.garage||'—')}</td></tr>
    <tr><td>I-75 exit</td><td>${esc(h.exit)} (${h.exitMi} mi)</td></tr><tr><td>Flood zone</td><td>${esc(h.flood||'—')}</td></tr><tr><td>Evacuation</td><td>${esc(h.evac||'—')}</td></tr>
    <tr><td>Days on market</td><td>${esc(h.dom||'—')}</td></tr></table>
-   <a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin ↗</a> · ${svA(h.lat,h.lon)} · <a href="#" onclick="SEL.has('${esc(h.url)}')?SEL.delete('${esc(h.url)}'):SEL.add('${esc(h.url)}');renderListings();return false;">Add / remove from Compare</a>`;
+   ${noteBox(h)}<a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open on Redfin ↗</a> · ${svA(h.lat,h.lon)} · <a href="#" onclick="SEL.has('${esc(h.url)}')?SEL.delete('${esc(h.url)}'):SEL.add('${esc(h.url)}');renderListings();return false;">Add / remove from Compare</a>`;
 }
 function renderListings(){
   LG.listings.clearLayers(); for(const k in PIN) delete PIN[k]; if(!LST) return;
   const on=new Set([...document.querySelectorAll('#lstClasses input:checked')].map(i=>i.dataset.c));
   const ex=$('lstExit').value, gOnly=$('lstGarageOnly').checked; let n=0; const cnt=newCnt();
   for(const h of LST.rows){
-    if(h.hid || !on.has(h.cls) || (ex && h.exit!==ex)) continue;
+    if(h.hid || !showIt(h,on) || (ex && h.exit!==ex)) continue;
     if(gOnly && h.cls!=='C' && !/car|yes/.test(h.garage||'')) continue;
-    n++; cnt[h.cls]++; const picked = typeof SEL!=='undefined' && SEL.has(h.url);
-    LG.listings.addLayer(PIN[h.url]=L.circleMarker([h.lat,h.lon],{pane:'listingsPane',renderer:LST_RENDERER,radius:picked?11:(h.cls==='C'?6:8),color:picked?'#ffcc00':'#fff',weight:picked?4:2,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
+    n++; memb(h).forEach(k=>cnt[k]++); const picked = typeof SEL!=='undefined' && SEL.has(h.url);
+    LG.listings.addLayer(PIN[h.url]=L.circleMarker([h.lat,h.lon],{pane:'listingsPane',renderer:LST_RENDERER,radius:picked?11:(h.cls==='C'?6:8),color:picked?'#ffcc00':'#fff',weight:picked?4:2,fillColor:CLS_COLOR[dispCls(h,on)],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
   }
   if(typeof renderHomes==='function') renderHomes();
   $('lstWarn').style.display='none';
@@ -770,18 +778,18 @@ function hFiltered(){
   const pmin=num($('fPmin').value), pmax=num($('fPmax').value), beds=num($('fBeds').value), baths=num($('fBaths').value), sq=num($('fSqft').value),
         lot=num($('fLot').value), yr=num($('fYear').value), dom=num($('fDom').value), fish=num($('fFish').value), gar=$('fGarage').checked, nf=$('fNoFlag').checked, mv=$('fMapView').checked;
   const b=map.getBounds(); if(fish!=null) LST.rows.forEach(fishDistances);
-  return LST.rows.filter(h=> !h.hid && on.has(h.cls) && (!ex||h.exit===ex) && (pmin==null||h.price>=pmin) && (pmax==null||h.price<=pmax) && (beds==null||h.beds>=beds) && (baths==null||h.baths>=baths)
+  return LST.rows.filter(h=> !h.hid && showIt(h,on) && (!ex||h.exit===ex) && (pmin==null||h.price>=pmin) && (pmax==null||h.price<=pmax) && (beds==null||h.beds>=beds) && (baths==null||h.baths>=baths)
     && (sq==null||(h.sqft||0)>=sq) && (lot==null||(acres(h)||0)>=lot) && (yr==null||(h.year||0)>=yr) && (dom==null||(+h.dom||0)<=dom)
     && (!gar||/car|yes/.test(h.garage||'')||h.cls==='C'&&/car|yes/.test(h.garage||'')) && (fish==null||Math.min(h.launchMi??1e9,h.pierMi??1e9)<=fish) && (!nf||!h.note) && (!mv||b.contains([h.lat,h.lon])));
 }
 const COLS=[['pick',''],['cls','Class'],['addr','Address'],['price','Price'],['ppsf','$/sq ft'],['beds','Beds'],['baths','Baths'],['sqft','Sq ft'],['lot','Lot (ac)'],['year','Built'],
-  ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['tax','Tax/yr'],['water','Water'],['sewer','Sewer'],['storm','Storm protection'],['pool','Pool'],['elevFt','Elev ft'],['walMi','Mi Walmart'],['hospMi','Mi hospital'],['subdivision','Subdivision'],['launchMi','Mi launch'],['pierMi','Mi pier'],['link','Redfin']];
+  ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['tax','Tax/yr'],['water','Water'],['sewer','Sewer'],['storm','Storm protection'],['pool','Pool'],['elevFt','Elev ft'],['walMi','Mi Walmart'],['hospMi','Mi hospital'],['subdivision','Subdivision'],['launchMi','Mi launch'],['pierMi','Mi pier'],['snote','Team notes'],['link','Redfin']];
 function sortVal(h,k){ return k==='ppsf'?ppsf(h): k==='lot'?acres(h): k==='garage'?garN(h): k==='dom'?+h.dom: k==='status'?status(h): k==='fee'?(h.feeNote||''): h[k]; }
 function hRow(h){ fishDistances(h); const id=h.url; const pc=ppsf(h), ac=acres(h);
   return `<tr class="hrow${SEL.has(id)?' sel':''}" data-id="${esc(id)}"><td><input type="checkbox" class="pk" ${SEL.has(id)?'checked':''}></td>
-  <td><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${CLS_NAME[h.cls]}</td><td>${esc(h.addr)}, ${esc(h.city)}</td><td>${money(h.price)}</td><td>${pc?'$'+Math.round(pc):'—'}</td>
+  <td><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${esc(clsLabel(h))}</td><td>${esc(h.addr)}, ${esc(h.city)}</td><td>${money(h.price)}</td><td>${pc?'$'+Math.round(pc):'—'}</td>
   <td>${h.beds}</td><td>${h.baths}</td><td>${h.sqft?Math.round(h.sqft).toLocaleString():'—'}</td><td>${ac?ac.toFixed(2):'—'}</td><td>${h.year||'—'}</td><td>${esc(h.garage||'—')}</td><td>${esc(h.type)}</td>
-  <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td>${h.tax!=null?money(h.tax):''}</td><td>${esc(h.water||'')}</td><td>${esc(h.sewer||'')}</td><td>${esc(h.storm||'')}</td><td>${esc(h.pool||'')}</td><td>${h.elevFt??''}</td><td>${h.walMi??''}</td><td>${h.hospMi??''}</td><td>${esc(h.subdivision||'')}</td><td>${h.launchMi??''}</td><td>${h.pierMi??''}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
+  <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td>${h.tax!=null?money(h.tax):''}</td><td>${esc(h.water||'')}</td><td>${esc(h.sewer||'')}</td><td>${esc(h.storm||'')}</td><td>${esc(h.pool||'')}</td><td>${h.elevFt??''}</td><td>${h.walMi??''}</td><td>${h.hospMi??''}</td><td>${esc(h.subdivision||'')}</td><td>${h.launchMi??''}</td><td>${h.pierMi??''}</td><td>${esc(h.snote||'')}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
 function renderHomes(){
   const rows=hFiltered(); $('hCount').textContent = LST? `${rows.length} of ${LST.rows.length} homes` : ''; $('hSelN').textContent=SEL.size;
   $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare'); $('hSheet').classList.toggle('primary',HVIEW==='sheet'); $('hFishList').classList.toggle('primary',HVIEW==='fish');
@@ -795,7 +803,7 @@ function renderHomes(){
   const head='<tr>'+COLS.map(([c,l])=>`<th data-k="${c}">${l}${c===k?(d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
   let body='';
   for(const g of keys){ const list=groups[g].sort((a,b)=>{const x=sortVal(a,k),y=sortVal(b,k); return (x>y?1:x<y?-1:0)*d;});
-    const c=newCnt(); list.forEach(h=>c[h.cls]++);
+    const c=newCnt(); list.forEach(h=>memb(h).forEach(k=>c[k]++));
     body+=`<tr class="grp" data-g="${esc(g)}"><td colspan="${COLS.length}">${COLLAPSED.has(g)?'▸':'▾'} ${esc(g)} — ${list.length} homes (${cntStr(c)})</td></tr>`;
     if(!COLLAPSED.has(g)) body+=list.map(hRow).join(''); }
   $('homesBody').innerHTML = rows.length? `<table class="ht">${head}${body}</table>` : '<div class="note" style="padding:10px">No homes match these filters.</div>';
@@ -803,7 +811,7 @@ function renderHomes(){
 function renderCompare(){
   const hs=LST.rows.filter(h=>SEL.has(h.url));
   if(!hs.length){ $('homesBody').innerHTML='<div class="note" style="padding:10px">Tick homes in the List view, then click Compare.</div>'; return; }
-  const spec=[['Class',h=>CLS_NAME[h.cls],null],['Price',h=>money(h.price),h=>-h.price],['$/sq ft',h=>ppsf(h)?'$'+Math.round(ppsf(h)):'—',h=>-(ppsf(h)||1e9)],
+  const spec=[['Class',h=>clsLabel(h),null],['Price',h=>money(h.price),h=>-h.price],['$/sq ft',h=>ppsf(h)?'$'+Math.round(ppsf(h)):'—',h=>-(ppsf(h)||1e9)],
    ['Beds',h=>h.beds,h=>h.beds],['Baths',h=>h.baths,h=>h.baths],['Sq ft',h=>h.sqft?Math.round(h.sqft).toLocaleString():'—',h=>h.sqft||0],
    ['Lot',h=>acres(h)?acres(h).toFixed(2)+' ac':'—',h=>acres(h)||0],['Year built',h=>h.year||'—',h=>h.year||0],['Garage',h=>h.garage||'—',h=>garN(h)],
    ['Type',h=>h.type,null],['HOA / fee / notes',h=>h.feeNote||'none',null],['Flood zone',h=>h.flood||'—',null],['Evacuation zone',h=>h.evac||'—',null],
@@ -829,7 +837,7 @@ function renderCompare(){
 let SHTAB='sec', SHSORT=null;
 const CLS_FILL={X:'#FFFFFF'}, CLS_ORD={X:99};
 const ivv = v => (v!=null&&v!==''&&/^\d+(\.\d+)?$/.test(String(v)))? Math.trunc(+v) : null;
-const SC=[['I-75 Section',h=>h.exit],['Exit #',h=>h.exitRef],['Class',h=>CLS_NAME[h.cls]],['Status',h=>h.status],
+const SC=[['I-75 Section',h=>h.exit],['Exit #',h=>h.exitRef],['Class',h=>clsLabel(h)],['Status',h=>h.status],
  ['Address',h=>h.addr],['City',h=>h.city],['ZIP',h=>h.zip],['County',h=>h.county],['Subdivision',h=>h.subdivision],
  ['Price',h=>h.price,'usd'],['$/Sq Ft',h=>ppsf(h),'usd'],['Beds',h=>h.beds],['Baths',h=>h.baths],['Full Baths',h=>h.fullBaths],['Half Baths',h=>h.halfBaths],
  ['Sq Ft',h=>h.sqft,'int'],['Lot (acres)',h=>acres(h),'d2'],['Year Built',h=>ivv(h.year)],['Stories',h=>h.stories],['Garage',h=>h.garage],['Parking Detail',h=>h.parking],
@@ -877,7 +885,7 @@ function renderSheet(rows){ rows.forEach(fishDistances); SH_NOTES.splice(0,SH_NO
   if(!rows.length && SHTAB!=='notes'){ $('homesBody').innerHTML=t+'<div class="note" style="padding:10px">No homes match these filters.</div>'; return; }
   if(SHTAB==='sec'){
     t+='<table class="sh">'+head(2);
-    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c=newCnt(); grp.forEach(h=>c[h.cls]++);
+    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c=newCnt(); grp.forEach(h=>memb(h).forEach(k=>c[k]++));
       t+=`<tr class="grp" data-g="${esc(e)}"><td colspan="${SC.length-2}">${COLLAPSED.has(e)?'▸':'▾'} ${esc(e)} — ${grp.length} homes  (${cntStr(c)})</td></tr>`;
       if(!COLLAPSED.has(e)) t+=grp.map(h=>`<tr class="hrow" data-id="${esc(h.url)}">${shCells(h,2)}</tr>`).join(''); }
     t+='</table>';
@@ -888,7 +896,7 @@ function renderSheet(rows){ rows.forEach(fishDistances); SH_NOTES.splice(0,SH_NO
   } else if(SHTAB==='sum'){
     t+='<table class="sh"><tr>'+['I-75 Section',...clsKeys().map(k=>CLS_NAME[k]),'Total','Lowest price','Median price','Median annual tax'].map(x=>`<th style="max-width:none;cursor:default">${x}</th>`).join('')+'</tr>';
     const T=newCnt();
-    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c=newCnt(); grp.forEach(h=>{c[h.cls]++; T[h.cls]++;});
+    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c=newCnt(); grp.forEach(h=>{memb(h).forEach(k=>{c[k]++; T[k]++;});});
       const tx=grp.map(h=>h.tax).filter(v=>typeof v==='number');
       t+=`<tr><td>${esc(e)}</td>${clsKeys().map(k=>`<td class="n">${c[k]}</td>`).join('')}<td class="n"><b>${grp.length}</b></td><td class="n">${shFmt(Math.min(...grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(tx),'usd')}</td></tr>`; }
     t+=`<tr class="tot"><td>Total</td>${clsKeys().map(k=>`<td class="n">${T[k]}</td>`).join('')}<td class="n">${base.length}</td><td></td><td></td><td></td></tr></table>`;
@@ -933,7 +941,7 @@ const FKIND = f => f.t==='pier'?(f.s==='spot'?'Fishing spot':'Fishing pier'):f.t
 const gmap = f => `https://www.google.com/maps/search/?api=1&query=${f.lat},${f.lon}`, gdir = f => `https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lon}`;
 const gsearch = f => 'https://www.google.com/search?q='+encodeURIComponent(f.n+' Florida '+(f.t==='ramp'||f.t==='pier'?'fishing hours fees':'hours'));
 const osmLink = f => `https://www.openstreetmap.org/${{n:'node',w:'way',r:'relation'}[f.id[0]]}/${f.id.slice(1)}`;
-const homesNear = (f,mi) => { if(!LST) return null; const c=newCnt(); let n=0; for(const h of LST.rows){ if(hav(f.lat,f.lon,h.lat,h.lon)<=mi){ c[h.cls]++; n++; } } return {n,c}; };
+const homesNear = (f,mi) => { if(!LST) return null; const c=newCnt(); let n=0; for(const h of LST.rows){ if(hav(f.lat,f.lon,h.lat,h.lon)<=mi){ memb(h).forEach(k=>c[k]++); n++; } } return {n,c}; };
 function fishLinks(f){ return [f.w?`<a href="${encodeURI(f.w)}" target="_blank" rel="noopener">Website ↗</a>`:'', f.wp?`<a href="${encodeURI(f.wp)}" target="_blank" rel="noopener">Wikipedia ↗</a>`:'',
   `<a href="${gmap(f)}" target="_blank" rel="noopener">Google Maps ↗</a>`,`<a href="${gdir(f)}" target="_blank" rel="noopener">Directions ↗</a>`,svA(f.lat,f.lon),`<a href="${gsearch(f)}" target="_blank" rel="noopener">Search hours/fees ↗</a>`,`<a href="${osmLink(f)}" target="_blank" rel="noopener">OpenStreetMap ↗</a>`].filter(Boolean).join(' · '); }
 function fishPopup(f){ const hn=homesNear(f,10);
@@ -999,7 +1007,7 @@ const CLS_FACTORY = {
   B:{...CLS_NEW, ord:2, name:'Class B', color:'#2563eb', pmax:450000, lot:0.25, yfrom:2002, baths:2, desc:'Built 2002 or later on over a quarter acre, under $450k.'},
   S:{...CLS_NEW, ord:3, name:'Class D', color:'#8e44ad', pmax:500000, yfrom:2002, baths:2, desc:'Stretch: built 2002 or later, 2+/2+, up to $500k, but misses A/B on price or lot.'},
   C:{...CLS_NEW, ord:4, name:'Class C', color:'#6b7280', pmax:350000, baths:1, desc:'Budget fallback: 2+ bed, 1+ bath, under $350k, any age.'} };
-const GLOB_FACTORY = {mobile:true, yfrom:null, yto:null};
+const GLOB_FACTORY = {mobile:true, yfrom:null, yto:null, overlap:false};
 let CLS_DEF = JSON.parse(JSON.stringify(CLS_FACTORY)), CLS_GLOBAL = JSON.parse(JSON.stringify(GLOB_FACTORY));
 const clsKeys = () => Object.keys(CLS_DEF).sort((a,b)=>(CLS_DEF[a].name||a).localeCompare(CLS_DEF[b].name||b,undefined,{numeric:true}));
 const clsShort = k => k==='X' ? 'none' : (CLS_DEF[k].name||k).replace(/^class\s+/i,'');
@@ -1023,7 +1031,7 @@ function clsDesc(k){ const d=CLS_DEF[k]; if(!d.on) return '(switched off)';
   if(d.domMax!=null) bits.push(`listed ${d.domMax} days or fewer`); if(d.garage==='has') bits.push('garage'); if(!d.mobile) bits.push('no mobile homes');
   bits.push(d.hoa==='none'?'no HOA and no park fee':d.hoa==='max'&&d.hoaMax!=null?`HOA/fee up to ${money0(d.hoaMax)}/mo`:'HOA/park fee any (file holds no-HOA houses)');
   return (d.desc?d.desc+' Rules: ':'')+bits.join(', ')+'. Checked in order '+d.ord+'.'+(d.note?' Notes: '+d.note:''); }
-function classOf(h){
+function classOf(h,all){
   const yr=h.year||0, ac=acres(h)||0, gar=/car|yes/.test(h.garage||''), mob=h.type==='Mobile', dm=parseFloat(h.dom), fee=(typeof h.hoa==='number')?h.hoa:0;
   const order=Object.keys(CLS_DEF).sort((a,b)=>(CLS_DEF[a].ord-CLS_DEF[b].ord)||a.localeCompare(b));
   for(const k of order){ const d=CLS_DEF[k]; if(!d.on) continue;
@@ -1036,15 +1044,16 @@ function classOf(h){
     if(d.garage==='has' && !gar) continue;
     if(d.domMax!=null && isFinite(dm) && dm>d.domMax) continue;
     if(d.hoa==='none' && fee>0) continue; if(d.hoa==='max' && d.hoaMax!=null && fee>d.hoaMax) continue;
-    return k; }
-  return 'X'; }
+    if(all){ all.push(k); continue; } return k; }
+  return all&&all.length?all[0]:'X'; }
 function reclassify(){ if(!LST) return;
+  LST.rows.forEach((h,i)=>{ h._i=i; if(h.snote==null) h.snote=(NOTES[h.url]||{}).text||''; });
   for(const h of LST.rows){ if(h.cls0==null) h.cls0=h.cls;
     const yr=h.year||0;
     h.hid = (h.type==='Mobile' && !CLS_GLOBAL.mobile) || (CLS_GLOBAL.yfrom!=null && yr<CLS_GLOBAL.yfrom) || (CLS_GLOBAL.yto!=null && yr>CLS_GLOBAL.yto);
-    h.cls = classOf(h); } }
+    h.all=[]; h.cls = classOf(h,h.all); } }
 function applyClasses(){ syncClsMaps(); buildLeftChecks(); reclassify(); renderListings(); updateClassCounts(); }
-function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEach(h=>{ if(!h.hid) c[h.cls]++; });
+function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEach(h=>{ if(!h.hid) memb(h).forEach(k=>c[k]++); });
   Object.keys(CLS_DEF).forEach(k=>{ const e=document.getElementById('cdCnt_'+k); if(e) e.textContent=c[k]; }); const x=document.getElementById('cdCnt_X'); if(x) x.textContent=c.X;
   const hidn=LST.rows.filter(h=>h.hid).length; const e=document.getElementById('cdHidden'); if(e) e.textContent=hidn?`${hidn} homes are hidden by the mobile-home / year-built switches.`:''; }
 
@@ -1070,6 +1079,7 @@ function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEac
      <div class="btnrow" style="border:none;padding:0"><button id="cdAdd" class="primary">＋ New class</button><span id="cdNoCls" class="note"></span></div>
      <div style="margin-top:10px"><b>All classes:</b>
        <label><input type="checkbox" id="cdMobile"> Include mobile / manufactured homes</label> &nbsp;
+       <label title="Off: each home belongs only to the first class it fits. On: a home shows (and counts) under every class it fits, so unticking A still shows an A-qualifying home if it also fits C."><input type="checkbox" id="cdOverlap"> Show overlapping classes</label> &nbsp;
        <label>Year built from <input type="number" id="cdYf" class="nn" style="width:70px"></label>
        <label>to <input type="number" id="cdYt" class="nn" style="width:70px"></label> <span class="note">(age range; e.g. 2012 = 14 years old or newer in 2026)</span>
        <div class="note"><span class="cdot" style="background:#adb5bd"></span> No class: <b id="cdCnt_X"></b> homes <span id="cdHidden"></span></div></div>
@@ -1114,14 +1124,14 @@ function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEac
         <label>Garage <select data-f="garage">${Object.entries(GAR).map(([v,l])=>`<option value="${v}"${x.garage===v?' selected':''}>${l}</option>`).join('')}</select></label></div>
        <textarea data-f="desc" placeholder="Description (what this class is for)">${esc(x.desc||'')}</textarea><textarea data-f="note" placeholder="Notes (anything to remember about this class)">${esc(x.note||'')}</textarea></div>`; }).join('');
     $('cdNoCls').textContent=keys.length?'':'No classes: every home is "No class".';
-    $('cdMobile').checked=CLS_GLOBAL.mobile; $('cdYf').value=nv(CLS_GLOBAL.yfrom); $('cdYt').value=nv(CLS_GLOBAL.yto); updateClassCounts(); }
+    $('cdMobile').checked=CLS_GLOBAL.mobile; $('cdOverlap').checked=!!CLS_GLOBAL.overlap; $('cdYf').value=nv(CLS_GLOBAL.yfrom); $('cdYt').value=nv(CLS_GLOBAL.yto); updateClassCounts(); }
   const STR=new Set(['name','desc','note','color','hoa','garage']), INT=new Set(['lot','beds','baths','ord']);
   function read(){ document.querySelectorAll('#cdCards .ccard').forEach(c=>{ const x=CLS_DEF[c.dataset.k]; if(!x) return;
       c.querySelectorAll('[data-f]').forEach(el=>{ const f=el.dataset.f; if(el.type==='checkbox') x[f]=el.checked; else if(STR.has(f)) x[f]=el.value; else if(INT.has(f)) x[f]=+el.value||0; else x[f]=num(el.value); });
       c.classList.toggle('off',!x.on); const hm=c.querySelector('[data-f=hoaMax]'); if(hm) hm.disabled = x.hoa!=='max'; });
-    CLS_GLOBAL.mobile=$('cdMobile').checked; CLS_GLOBAL.yfrom=num($('cdYf').value); CLS_GLOBAL.yto=num($('cdYt').value); }
+    CLS_GLOBAL.mobile=$('cdMobile').checked; CLS_GLOBAL.overlap=$('cdOverlap').checked; CLS_GLOBAL.yfrom=num($('cdYf').value); CLS_GLOBAL.yto=num($('cdYt').value); }
   let tmr; const live=()=>{ read(); applyClasses(); };
-  d.addEventListener('change',e=>{ if(e.target.closest('#cdCards')||/^cd(Mobile|Yf|Yt)$/.test(e.target.id)) live(); });
+  d.addEventListener('change',e=>{ if(e.target.closest('#cdCards')||/^cd(Mobile|Overlap|Yf|Yt)$/.test(e.target.id)) live(); });
   d.addEventListener('input',e=>{ if(e.target.closest('#cdCards') && (e.target.type==='text'||e.target.type==='color'||e.target.tagName==='TEXTAREA')){ clearTimeout(tmr); tmr=setTimeout(live,300); } });
   d.addEventListener('click',e=>{ const t=e.target;
     if(t===d||t.id==='cdClose') d.style.display='none';
@@ -1186,6 +1196,7 @@ $('btnRefresh').onclick = ()=>loadAll(true);
 Object.keys(STATUS_ITEMS).forEach(k=>setStatus(k,'wait','waiting'));
 busy('Loading data (first run can take a minute or two)…');
 loadAll(false);
+loadNotes();
 </script>
 </body>
 </html>
