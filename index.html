@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r20</title>
+<title>Naples Home Search Map r21</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -78,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r20</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r21</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -129,14 +129,16 @@
   <input type="file" id="lstFile" accept=".json" style="margin:6px 0">
   <div id="lstInfo" class="note"></div>
   <div id="lstWarn" class="bad" style="font-weight:600;margin:4px 0">⚠ No homes loaded yet — choose Naples_Listings_r2.json above to see home markers.</div>
+  <div class="btns"><button id="btnClsDlg" class="primary">⚙ Classes, mobile homes, age &amp; save defaults</button></div>
   <div class="row" id="lstClasses">
     <label><input type="checkbox" data-c="A" checked> <span class="sw" style="display:inline-block;background:#1b9e3a"></span> A</label>
     <label><input type="checkbox" data-c="B" checked> <span class="sw" style="display:inline-block;background:#2563eb"></span> B</label>
-    <label><input type="checkbox" data-c="S" checked> <span class="sw" style="display:inline-block;background:#8e44ad"></span> Stretch</label>
     <label><input type="checkbox" data-c="C" checked> <span class="sw" style="display:inline-block;background:#6b7280"></span> C</label>
+    <label><input type="checkbox" data-c="S" checked> <span class="sw" style="display:inline-block;background:#8e44ad"></span> D</label>
+    <label><input type="checkbox" data-c="X"> <span class="sw" style="display:inline-block;background:#adb5bd"></span> No class</label>
   </div>
   <div class="row"><label>I-75 exit</label><select id="lstExit"><option value="">All exits</option></select></div>
-  <div class="row"><label><input type="checkbox" id="lstGarageOnly"> Hide A/B/Stretch homes without a confirmed garage</label></div>
+  <div class="row"><label><input type="checkbox" id="lstGarageOnly"> Hide A/B/D homes without a confirmed garage</label></div>
 
   <h2>Check an address</h2>
   <input id="addr" placeholder="e.g. 1234 Main St, Naples FL — press Enter">
@@ -166,7 +168,7 @@
 <div id="homes">
   <div id="homesBar">
     <b>Homes</b> <span id="hCount" class="note"></span>
-    <button id="hList" class="primary">List</button><button id="hCompare">Compare (<span id="hSelN">0</span>)</button><button id="hFishList" title="Piers, boat launches, parks, marinas with links">Fishing places</button><button id="hSheet" title="Same layout as Naples_Listings_r2.xlsx">Spreadsheet</button><button id="hClear">Clear picks</button><button id="hFull" title="Hide the map and give this panel the whole window">⤢ Full</button>
+    <button id="hList" class="primary">List</button><button id="hCompare">Compare (<span id="hSelN">0</span>)</button><button id="hClsDlg" title="Edit class rules, mobile homes, age range, save defaults">⚙ Classes</button><button id="hFishList" title="Piers, boat launches, parks, marinas with links">Fishing places</button><button id="hSheet" title="Same layout as Naples_Listings_r2.xlsx">Spreadsheet</button><button id="hClear">Clear picks</button><button id="hFull" title="Hide the map and give this panel the whole window">⤢ Full</button>
     <span class="note">|</span>
     <label>Price $<input type="number" id="fPmin" placeholder="min" step="10000"></label><label>– $<input type="number" id="fPmax" placeholder="max" step="10000"></label>
     <label>Beds ≥<input type="number" id="fBeds" min="0" step="1" style="width:48px"></label>
@@ -717,7 +719,7 @@ $('btnGeoSweet').onclick = ()=>{ const g=sweetGeoJSON(); if(g) download(`Naples_
 $('btnKmlDraw').onclick = ()=>{ const fc=LG.draw.toGeoJSON(); download(`Naples_MyDrawings_${stamp()}.kml`, toKML(fc.features,'My drawings','ff8833'), 'application/vnd.google-earth.kml+xml'); };
 
 /* ================= LISTINGS (local file only) ================= */
-const CLS_COLOR={A:'#1b9e3a',B:'#2563eb',S:'#8e44ad',C:'#6b7280'}, CLS_NAME={A:'Class A',B:'Class B',S:'Stretch',C:'Class C'};
+const CLS_COLOR={A:'#1b9e3a',B:'#2563eb',S:'#8e44ad',C:'#6b7280',X:'#adb5bd'}, CLS_NAME={A:'Class A',B:'Class B',S:'Class D',C:'Class C',X:'No class'};
 let LST=null;
 const money = v => v==null?'—':'$'+Math.round(v).toLocaleString();
 function lstPopup(h){
@@ -734,19 +736,19 @@ function lstPopup(h){
 function renderListings(){
   LG.listings.clearLayers(); for(const k in PIN) delete PIN[k]; if(!LST) return;
   const on=new Set([...document.querySelectorAll('#lstClasses input:checked')].map(i=>i.dataset.c));
-  const ex=$('lstExit').value, gOnly=$('lstGarageOnly').checked; let n=0; const cnt={A:0,B:0,S:0,C:0};
+  const ex=$('lstExit').value, gOnly=$('lstGarageOnly').checked; let n=0; const cnt={A:0,B:0,S:0,C:0,X:0};
   for(const h of LST.rows){
-    if(!on.has(h.cls) || (ex && h.exit!==ex)) continue;
+    if(h.hid || !on.has(h.cls) || (ex && h.exit!==ex)) continue;
     if(gOnly && h.cls!=='C' && !/car|yes/.test(h.garage||'')) continue;
     n++; cnt[h.cls]++; const picked = typeof SEL!=='undefined' && SEL.has(h.url);
     LG.listings.addLayer(PIN[h.url]=L.circleMarker([h.lat,h.lon],{pane:'listingsPane',renderer:LST_RENDERER,radius:picked?11:(h.cls==='C'?6:8),color:picked?'#ffcc00':'#fff',weight:picked?4:2,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
   }
   if(typeof renderHomes==='function') renderHomes();
   $('lstWarn').style.display='none';
-  $('lstInfo').innerHTML = `${esc(LST.name||'listings')} · pulled ${esc(LST.generated||'?')} · showing ${n}: A ${cnt.A}, B ${cnt.B}, Stretch ${cnt.S}, C ${cnt.C}`;
+  $('lstInfo').innerHTML = `${esc(LST.name||'listings')} · pulled ${esc(LST.generated||'?')} · showing ${n}: A ${cnt.A}, B ${cnt.B}, C ${cnt.C}, D ${cnt.S}${cnt.X?', no class '+cnt.X:''}`;
 }
 function useListings(obj, save){
-  LST=obj; const exits=[...new Set(obj.rows.map(r=>r.exit))].sort((a,b)=>(parseInt(b.match(/\d+/))||0)-(parseInt(a.match(/\d+/))||0));
+  LST=obj; reclassify(); const exits=[...new Set(obj.rows.map(r=>r.exit))].sort((a,b)=>(parseInt(b.match(/\d+/))||0)-(parseInt(a.match(/\d+/))||0));
   $('lstExit').innerHTML='<option value="">All exits</option>'+exits.map(e=>`<option>${esc(e)}</option>`).join('');
   if(save) idb.set('listings',{t:Date.now(),data:obj});
   renderListings();
@@ -771,7 +773,7 @@ function hFiltered(){
   const pmin=num($('fPmin').value), pmax=num($('fPmax').value), beds=num($('fBeds').value), baths=num($('fBaths').value), sq=num($('fSqft').value),
         lot=num($('fLot').value), yr=num($('fYear').value), dom=num($('fDom').value), fish=num($('fFish').value), gar=$('fGarage').checked, nf=$('fNoFlag').checked, mv=$('fMapView').checked;
   const b=map.getBounds(); if(fish!=null) LST.rows.forEach(fishDistances);
-  return LST.rows.filter(h=> on.has(h.cls) && (!ex||h.exit===ex) && (pmin==null||h.price>=pmin) && (pmax==null||h.price<=pmax) && (beds==null||h.beds>=beds) && (baths==null||h.baths>=baths)
+  return LST.rows.filter(h=> !h.hid && on.has(h.cls) && (!ex||h.exit===ex) && (pmin==null||h.price>=pmin) && (pmax==null||h.price<=pmax) && (beds==null||h.beds>=beds) && (baths==null||h.baths>=baths)
     && (sq==null||(h.sqft||0)>=sq) && (lot==null||(acres(h)||0)>=lot) && (yr==null||(h.year||0)>=yr) && (dom==null||(+h.dom||0)<=dom)
     && (!gar||/car|yes/.test(h.garage||'')||h.cls==='C'&&/car|yes/.test(h.garage||'')) && (fish==null||Math.min(h.launchMi??1e9,h.pierMi??1e9)<=fish) && (!nf||!h.note) && (!mv||b.contains([h.lat,h.lon])));
 }
@@ -796,8 +798,8 @@ function renderHomes(){
   const head='<tr>'+COLS.map(([c,l])=>`<th data-k="${c}">${l}${c===k?(d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
   let body='';
   for(const g of keys){ const list=groups[g].sort((a,b)=>{const x=sortVal(a,k),y=sortVal(b,k); return (x>y?1:x<y?-1:0)*d;});
-    const c={A:0,B:0,S:0,C:0}; list.forEach(h=>c[h.cls]++);
-    body+=`<tr class="grp" data-g="${esc(g)}"><td colspan="${COLS.length}">${COLLAPSED.has(g)?'▸':'▾'} ${esc(g)} — ${list.length} homes (A ${c.A} · B ${c.B} · Stretch ${c.S} · C ${c.C})</td></tr>`;
+    const c={A:0,B:0,S:0,C:0,X:0}; list.forEach(h=>c[h.cls]++);
+    body+=`<tr class="grp" data-g="${esc(g)}"><td colspan="${COLS.length}">${COLLAPSED.has(g)?'▸':'▾'} ${esc(g)} — ${list.length} homes (A ${c.A} · B ${c.B} · C ${c.C} · D ${c.S})</td></tr>`;
     if(!COLLAPSED.has(g)) body+=list.map(hRow).join(''); }
   $('homesBody').innerHTML = rows.length? `<table class="ht">${head}${body}</table>` : '<div class="note" style="padding:10px">No homes match these filters.</div>';
 }
@@ -828,7 +830,7 @@ function renderCompare(){
 
 /* ================= SPREADSHEET VIEW (same tabs, columns and order as Naples_Listings_r2.xlsx) ================= */
 let SHTAB='sec', SHSORT=null;
-const CLS_FILL={A:'#C8E6C9',B:'#BBDEFB',S:'#E1BEE7',C:'#E0E0E0'}, CLS_ORD={A:0,B:1,S:2,C:3};
+const CLS_FILL={A:'#C8E6C9',B:'#BBDEFB',S:'#E1BEE7',C:'#E0E0E0',X:'#FFFFFF'}, CLS_ORD={A:0,B:1,C:2,S:3,X:4};
 const ivv = v => (v!=null&&v!==''&&/^\d+(\.\d+)?$/.test(String(v)))? Math.trunc(+v) : null;
 const SC=[['I-75 Section',h=>h.exit],['Exit #',h=>h.exitRef],['Class',h=>CLS_NAME[h.cls]],['Status',h=>h.status],
  ['Address',h=>h.addr],['City',h=>h.city],['ZIP',h=>h.zip],['County',h=>h.county],['Subdivision',h=>h.subdivision],
@@ -845,7 +847,7 @@ const SC=[['I-75 Section',h=>h.exit],['Exit #',h=>h.exitRef],['Class',h=>CLS_NAM
  ['Miles to Hospital',h=>h.hospMi,'d1'],['Nearest Hospital',h=>h.hospName],["Miles to Costco/Sam's",h=>h.clubMi,'d1'],["Nearest Costco/Sam's",h=>h.clubName],
  ['Miles to Boat Launch',h=>h.launchMi,'d1'],['Nearest Boat Launch',h=>h.launchName],['Miles to Fishing Pier/Spot',h=>h.pierMi,'d1'],['Nearest Fishing Pier/Spot',h=>h.pierName],['Miles to Park/Preserve/Beach',h=>h.parkMi,'d1'],['Nearest Park/Preserve/Beach',h=>h.parkName],
  ['School Avg (GreatSchools)',h=>h.schoolAvg,'d1'],['Schools',h=>h.schools],['Listing Agent',h=>h.agent],['MLS #',h=>h.mls],['Description',h=>h.desc],['Redfin Link',null]];
-const SH_NOTES=[['Pulled','Listings and listing details are from Redfin, pulled on the dates shown in the left panel. Checked against the Naples Home Search Map conditions.'],
+let SH_NOTES=[['Pulled','Listings and listing details are from Redfin, pulled on the dates shown in the left panel. Checked against the Naples Home Search Map conditions.'],
  ['Class A','Over 0.5 acre, built 2017+, 2+ bed / 2+ bath, garage, under $450,000, no HOA'],['Class B','Over 0.25 acre, built 2002+, 2+ bed / 2+ bath, garage, under $450,000, no HOA'],
  ['Stretch','Built 2002+, 2+ bed / 2+ bath, garage, under $500,000, no HOA, but lot size or price misses A/B'],['Class C','2+ bed / 1+ bath, under $350,000, no HOA (mobile homes with a park/shared fee allowed and noted)'],
  ['Blank cells','Blank means the listing did not state it. It does not mean "no".'],
@@ -869,17 +871,17 @@ function shCells(h,from){ let t='';
     t+=`<td${cl?` class="${cl}"`:''}${st}${long}>${shFmt(v,f)}</td>`; }
   return t; }
 const median = a => { if(!a.length) return null; a=[...a].sort((x,y)=>x-y); const m=a.length>>1; return a.length%2? a[m] : (a[m-1]+a[m])/2; };
-function renderSheet(rows){ rows.forEach(fishDistances);
+function renderSheet(rows){ rows.forEach(fishDistances); SH_NOTES.splice(0,SH_NOTES.length,...SH_NOTES.filter(([k])=>!/^Class [A-D]$|^Stretch$|^No class$/.test(k)).filter(([k])=>k!=='_cls')); SH_NOTES.splice(1,0,...['A','B','C','S'].map(k=>[CLS_NAME[k],clsDesc(k)]),['No class','Homes that match none of the classes. Hidden unless "No class" is ticked in the left panel.']);
   const base=[...rows].sort((a,b)=> (b.exitRef-a.exitRef) || (CLS_ORD[a.cls]-CLS_ORD[b.cls]) || (a.price-b.price));
   const exits=[]; base.forEach(h=>{ if(!exits.includes(h.exit)) exits.push(h.exit); });
   const tabs=[['sec','By I-75 Section'],['sum','Summary'],['all','All Homes'],['notes','Column Notes']];
-  let t='<div id="shTabs">'+tabs.map(([k,l])=>`<button data-t="${k}" class="${SHTAB===k?'on':''}">${l}</button>`).join('')+`<span class="note">${rows.length} homes · ${SC.length} columns · same layout as Naples_Listings_r2.xlsx</span></div>`;
+  let t='<div id="shTabs">'+tabs.map(([k,l])=>`<button data-t="${k}" class="${SHTAB===k?'on':''}">${l}</button>`).join('')+`<span class="note">${rows.length} homes · ${SC.length} columns · columns follow the Excel export; classes follow your Classes settings</span></div>`;
   const head=(from)=>'<tr>'+SC.slice(from).map(([l],j)=>{ const i=j+from, s=SHTAB==='all'&&SHSORT&&SHSORT.i===i?(SHSORT.dir>0?' ▲':' ▼'):''; return `<th${SHTAB==='all'?` data-s="${i}"`:''}${l==='Address'?' class="addr"':''}>${esc(l)}${s}</th>`; }).join('')+'</tr>';
   if(!rows.length && SHTAB!=='notes'){ $('homesBody').innerHTML=t+'<div class="note" style="padding:10px">No homes match these filters.</div>'; return; }
   if(SHTAB==='sec'){
     t+='<table class="sh">'+head(2);
-    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c={A:0,B:0,S:0,C:0}; grp.forEach(h=>c[h.cls]++);
-      t+=`<tr class="grp" data-g="${esc(e)}"><td colspan="${SC.length-2}">${COLLAPSED.has(e)?'▸':'▾'} ${esc(e)} — ${grp.length} homes  (A ${c.A} · B ${c.B} · Stretch ${c.S} · C ${c.C})</td></tr>`;
+    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c={A:0,B:0,S:0,C:0,X:0}; grp.forEach(h=>c[h.cls]++);
+      t+=`<tr class="grp" data-g="${esc(e)}"><td colspan="${SC.length-2}">${COLLAPSED.has(e)?'▸':'▾'} ${esc(e)} — ${grp.length} homes  (A ${c.A} · B ${c.B} · C ${c.C} · D ${c.S})</td></tr>`;
       if(!COLLAPSED.has(e)) t+=grp.map(h=>`<tr class="hrow" data-id="${esc(h.url)}">${shCells(h,2)}</tr>`).join(''); }
     t+='</table>';
   } else if(SHTAB==='all'){
@@ -887,12 +889,12 @@ function renderSheet(rows){ rows.forEach(fishDistances);
       list=[...base].sort((a,b)=>{ const x=g(a),y=g(b); if(blank(x)||blank(y)) return blank(x)-blank(y); return (x>y?1:x<y?-1:0)*d; }); }
     t+='<table class="sh">'+head(0)+list.map((h,i)=>`<tr class="hrow${i%2?' stripe':''}" data-id="${esc(h.url)}">${shCells(h,0)}</tr>`).join('')+'</table>';
   } else if(SHTAB==='sum'){
-    t+='<table class="sh"><tr>'+['I-75 Section','Class A','Class B','Stretch','Class C','Total','Lowest price','Median price','Median annual tax'].map(x=>`<th style="max-width:none;cursor:default">${x}</th>`).join('')+'</tr>';
-    const T={A:0,B:0,S:0,C:0};
-    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c={A:0,B:0,S:0,C:0}; grp.forEach(h=>{c[h.cls]++; T[h.cls]++;});
+    t+='<table class="sh"><tr>'+['I-75 Section','Class A','Class B','Class C','Class D','Total','Lowest price','Median price','Median annual tax'].map(x=>`<th style="max-width:none;cursor:default">${x}</th>`).join('')+'</tr>';
+    const T={A:0,B:0,S:0,C:0,X:0};
+    for(const e of exits){ const grp=base.filter(h=>h.exit===e), c={A:0,B:0,S:0,C:0,X:0}; grp.forEach(h=>{c[h.cls]++; T[h.cls]++;});
       const tx=grp.map(h=>h.tax).filter(v=>typeof v==='number');
-      t+=`<tr><td>${esc(e)}</td><td class="n">${c.A}</td><td class="n">${c.B}</td><td class="n">${c.S}</td><td class="n">${c.C}</td><td class="n"><b>${grp.length}</b></td><td class="n">${shFmt(Math.min(...grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(tx),'usd')}</td></tr>`; }
-    t+=`<tr class="tot"><td>Total</td><td class="n">${T.A}</td><td class="n">${T.B}</td><td class="n">${T.S}</td><td class="n">${T.C}</td><td class="n">${base.length}</td><td></td><td></td><td></td></tr></table>`;
+      t+=`<tr><td>${esc(e)}</td><td class="n">${c.A}</td><td class="n">${c.B}</td><td class="n">${c.C}</td><td class="n">${c.S}</td><td class="n"><b>${grp.length}</b></td><td class="n">${shFmt(Math.min(...grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(grp.map(h=>h.price)),'usd')}</td><td class="n">${shFmt(median(tx),'usd')}</td></tr>`; }
+    t+=`<tr class="tot"><td>Total</td><td class="n">${T.A}</td><td class="n">${T.B}</td><td class="n">${T.C}</td><td class="n">${T.S}</td><td class="n">${base.length}</td><td></td><td></td><td></td></tr></table>`;
   } else {
     t+='<table class="sh notes">'+SH_NOTES.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td>${esc(v)}</td></tr>`).join('')+'</table>';
   }
@@ -934,12 +936,12 @@ const FKIND = f => f.t==='pier'?(f.s==='spot'?'Fishing spot':'Fishing pier'):f.t
 const gmap = f => `https://www.google.com/maps/search/?api=1&query=${f.lat},${f.lon}`, gdir = f => `https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lon}`;
 const gsearch = f => 'https://www.google.com/search?q='+encodeURIComponent(f.n+' Florida '+(f.t==='ramp'||f.t==='pier'?'fishing hours fees':'hours'));
 const osmLink = f => `https://www.openstreetmap.org/${{n:'node',w:'way',r:'relation'}[f.id[0]]}/${f.id.slice(1)}`;
-const homesNear = (f,mi) => { if(!LST) return null; const c={A:0,B:0,S:0,C:0}; let n=0; for(const h of LST.rows){ if(hav(f.lat,f.lon,h.lat,h.lon)<=mi){ c[h.cls]++; n++; } } return {n,c}; };
+const homesNear = (f,mi) => { if(!LST) return null; const c={A:0,B:0,S:0,C:0,X:0}; let n=0; for(const h of LST.rows){ if(hav(f.lat,f.lon,h.lat,h.lon)<=mi){ c[h.cls]++; n++; } } return {n,c}; };
 function fishLinks(f){ return [f.w?`<a href="${encodeURI(f.w)}" target="_blank" rel="noopener">Website ↗</a>`:'', f.wp?`<a href="${encodeURI(f.wp)}" target="_blank" rel="noopener">Wikipedia ↗</a>`:'',
   `<a href="${gmap(f)}" target="_blank" rel="noopener">Google Maps ↗</a>`,`<a href="${gdir(f)}" target="_blank" rel="noopener">Directions ↗</a>`,svA(f.lat,f.lon),`<a href="${gsearch(f)}" target="_blank" rel="noopener">Search hours/fees ↗</a>`,`<a href="${osmLink(f)}" target="_blank" rel="noopener">OpenStreetMap ↗</a>`].filter(Boolean).join(' · '); }
 function fishPopup(f){ const hn=homesNear(f,10);
   const rows=[['Type',FKIND(f)],['Address',(f.ad&&/\d/.test(f.ad))?esc(f.ad):`<span class="fa-addr" data-lat="${f.lat}" data-lon="${f.lon}">looking up…</span>`],f.op?['Operator',esc(f.op)]:null,f.fee?['Fee',esc(f.fee)]:null,f.hrs?['Hours',esc(f.hrs)]:null,f.ph?['Phone',esc(f.ph)]:null,f.acc?['Access',esc(f.acc)]:null,f.d?['Notes',esc(f.d)]:null,
-    hn?['Homes ≤10 mi',`${hn.n} (A ${hn.c.A} · B ${hn.c.B} · Stretch ${hn.c.S} · C ${hn.c.C})`]:null].filter(Boolean);
+    hn?['Homes ≤10 mi',`${hn.n} (A ${hn.c.A} · B ${hn.c.B} · C ${hn.c.C} · D ${hn.c.S})`]:null].filter(Boolean);
   return `<b>${esc(f.n)}</b><table class="pop">${rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table><div style="margin-top:4px">${fishLinks(f)}</div><div class="note">Source: OpenStreetMap ${esc(FISH.snapshot)}. Details are volunteer-entered and may be missing or out of date.</div>`; }
 const ADDR_CACHE={};
 async function lookupAddr(lat,lon){ const k=lat+','+lon; if(ADDR_CACHE[k]) return ADDR_CACHE[k];
@@ -992,6 +994,105 @@ $('homesBody').addEventListener('click', e=>{
   const lg={pier:'fPier',ramp:f.s==='unk'?'fRampU':'fRamp',marina:'fMarina',park:'fPark'}[f.t]; if(!map.hasLayer(LG[lg])){ LG[lg].addTo(map); const cb=document.querySelector(`input[data-k=${lg}]`); if(cb) cb.checked=true; }
   map.setView([f.lat,f.lon],Math.max(map.getZoom(),14)); L.popup({maxWidth:360}).setLatLng([f.lat,f.lon]).setContent(fishPopup(f)).openOn(map); });
 $('hFishList').onclick=()=>{ HVIEW='fish'; renderHomes(); };
+
+/* ================= CLASSES (editable) + SAVED DEFAULTS ================= */
+const CLS_FACTORY = {
+  A:{on:true, ord:1, pmin:null, pmax:450000, lot:0.5,  yfrom:2017, yto:null, beds:2, baths:2, mobile:true, garage:'any'},
+  B:{on:true, ord:2, pmin:null, pmax:450000, lot:0.25, yfrom:2002, yto:null, beds:2, baths:2, mobile:true, garage:'any'},
+  S:{on:true, ord:3, pmin:null, pmax:500000, lot:0,    yfrom:2002, yto:null, beds:2, baths:2, mobile:true, garage:'any'},
+  C:{on:true, ord:4, pmin:null, pmax:350000, lot:0,    yfrom:null, yto:null, beds:2, baths:1, mobile:true, garage:'any'} };
+const GLOB_FACTORY = {mobile:true, yfrom:null, yto:null};
+let CLS_DEF = JSON.parse(JSON.stringify(CLS_FACTORY)), CLS_GLOBAL = JSON.parse(JSON.stringify(GLOB_FACTORY));
+const CLS_LABEL = {A:'A',B:'B',C:'C',S:'D'};
+const money0 = v => v==null?'':'$'+Math.round(v).toLocaleString();
+function clsDesc(k){ const d=CLS_DEF[k]; if(!d.on) return '(switched off)';
+  const bits=[`${d.beds}+ bed / ${d.baths}+ bath`]; if(d.lot>0) bits.push(`lot over ${d.lot} acre`); if(d.yfrom!=null||d.yto!=null) bits.push(`built ${d.yfrom!=null?d.yfrom+'+':''}${d.yto!=null?' to '+d.yto:''}`);
+  if(d.pmin!=null||d.pmax!=null) bits.push(`price ${d.pmin!=null?'from '+money0(d.pmin)+' ':''}${d.pmax!=null?'under '+money0(d.pmax):''}`.trim()); if(d.garage==='has') bits.push('garage'); if(!d.mobile) bits.push('no mobile homes');
+  return bits.join(', ')+'; no HOA (mobile-home park fees allowed). Checked in order '+d.ord+'.'; }
+function classOf(h){
+  const yr=h.year||0, ac=acres(h)||0, gar=/car|yes/.test(h.garage||''), mob=h.type==='Mobile';
+  const order=Object.keys(CLS_DEF).sort((a,b)=>(CLS_DEF[a].ord-CLS_DEF[b].ord)||a.localeCompare(b));
+  for(const k of order){ const d=CLS_DEF[k]; if(!d.on) continue;
+    if(mob && !d.mobile) continue;
+    if(d.pmin!=null && h.price<d.pmin) continue; if(d.pmax!=null && !(h.price<d.pmax)) continue;
+    if(d.lot>0 && !(ac>d.lot)) continue;
+    if(d.yfrom!=null && yr<d.yfrom) continue; if(d.yto!=null && yr>d.yto) continue;
+    if((h.beds||0)<d.beds || (h.baths||0)<d.baths) continue;
+    if(d.garage==='has' && !gar) continue;
+    return k; }
+  return 'X'; }
+function reclassify(){ if(!LST) return;
+  for(const h of LST.rows){ if(h.cls0==null) h.cls0=h.cls;
+    const yr=h.year||0;
+    h.hid = (h.type==='Mobile' && !CLS_GLOBAL.mobile) || (CLS_GLOBAL.yfrom!=null && yr<CLS_GLOBAL.yfrom) || (CLS_GLOBAL.yto!=null && yr>CLS_GLOBAL.yto);
+    h.cls = classOf(h); } }
+function applyClasses(){ reclassify(); renderListings(); updateClassCounts(); }
+function updateClassCounts(){ if(!LST) return; const c={A:0,B:0,C:0,S:0,X:0}; LST.rows.forEach(h=>{ if(!h.hid) c[h.cls]++; });
+  ['A','B','C','S'].forEach(k=>{ const e=document.getElementById('cdCnt_'+k); if(e) e.textContent=c[k]; }); const x=document.getElementById('cdCnt_X'); if(x) x.textContent=c.X;
+  const hidn=LST.rows.filter(h=>h.hid).length; const e=document.getElementById('cdHidden'); if(e) e.textContent=hidn?`${hidn} homes are hidden by the mobile-home / year-built switches.`:''; }
+
+/* dialog */
+(function(){
+  const css=document.createElement('style'); css.textContent=`#clsDlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:2000;display:none;align-items:flex-start;justify-content:center;padding-top:50px}
+   #clsDlg .card{background:#fff;border-radius:8px;padding:14px 18px;max-width:1180px;max-height:88vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,.35);font:13px Arial,Helvetica,sans-serif}
+   #clsDlg table{border-collapse:collapse} #clsDlg th{text-align:left;font-size:11px;color:#444;padding:2px 6px;vertical-align:bottom} #clsDlg td{padding:3px 6px;border-top:1px solid #eee}
+   #clsDlg input[type=number]{width:84px} #clsDlg input.nn{width:52px} #clsDlg .btnrow{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center} #clsDlg h3{margin:0 0 6px}
+   #clsDlg .ok{color:#1b7f3a;font-weight:600}`; document.head.appendChild(css);
+  const d=document.createElement('div'); d.id='clsDlg';
+  d.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Home classes &amp; saved defaults</h3><button id="cdClose">Close ✕</button></div>
+   <div class="note">A home gets the <b>first</b> enabled class it fits, checking classes in the "Check order" shown. Homes that fit none are "No class" (hidden unless ticked in the left panel). Price "under" and lot "over" are strict. Your listings file only holds homes up to $500,000, 2+ beds, no HOA, so price limits above that need a fresh pull.</div>
+   <table id="cdTable"></table>
+   <div style="margin-top:10px"><b>All classes:</b>
+     <label><input type="checkbox" id="cdMobile"> Include mobile / manufactured homes</label> &nbsp;
+     <label>Year built from <input type="number" id="cdYf" class="nn" style="width:70px"></label>
+     <label>to <input type="number" id="cdYt" class="nn" style="width:70px"></label> <span class="note">(age range: blank = no limit; e.g. 2012 → homes 14 years old or newer in 2026)</span>
+     <div id="cdHidden" class="note"></div></div>
+   <div class="btnrow"><button id="cdSave" class="primary">💾 Save ALL current settings as my default</button><button id="cdRestoreClasses">Reset classes to original</button><button id="cdFactory">Restore factory defaults</button>
+     <button id="cdExport">Export settings file</button><label class="btn" style="border:1px solid #999;border-radius:4px;padding:3px 8px;cursor:pointer">Import settings file<input type="file" id="cdImport" accept=".json" style="display:none"></label><span id="cdMsg" class="ok"></span></div>
+   <div class="note" style="margin-top:6px">"Save" stores the class rules above, the Conditions on the left (miles, evacuation level…), the Homes filters (price, beds, lot, year…), which classes are ticked, which layers are on, the base map and the map position. They load automatically next time you open the page in this browser. Use Export / Import to carry them to another computer or browser.</div></div>`;
+  document.body.appendChild(d);
+  const GAR={any:'Any',has:'Must have garage'};
+  function build(){ const keys=['A','B','C','S'];
+    $('cdTable').innerHTML='<tr><th>On</th><th>Class</th><th>Check order</th><th>Price from $</th><th>Price under $</th><th>Lot over (acres)</th><th>Built from</th><th>Built to</th><th>Beds ≥</th><th>Baths ≥</th><th>Mobile homes</th><th>Garage</th><th>Homes now</th></tr>'+
+     keys.map(k=>{ const x=CLS_DEF[k]; return `<tr data-k="${k}"><td><input type="checkbox" data-f="on"${x.on?' checked':''}></td><td><span class="cdot" style="background:${CLS_COLOR[k]}"></span> <b>Class ${CLS_LABEL[k]}</b></td>
+      <td><input type="number" class="nn" data-f="ord" value="${x.ord}" min="1" max="9"></td><td><input type="number" data-f="pmin" step="10000" value="${x.pmin??''}"></td><td><input type="number" data-f="pmax" step="10000" value="${x.pmax??''}"></td>
+      <td><input type="number" class="nn" data-f="lot" step="0.05" min="0" value="${x.lot||''}"></td><td><input type="number" class="nn" style="width:70px" data-f="yfrom" value="${x.yfrom??''}"></td><td><input type="number" class="nn" style="width:70px" data-f="yto" value="${x.yto??''}"></td>
+      <td><input type="number" class="nn" data-f="beds" min="0" value="${x.beds}"></td><td><input type="number" class="nn" data-f="baths" min="0" step="0.5" value="${x.baths}"></td>
+      <td><input type="checkbox" data-f="mobile"${x.mobile?' checked':''}> allow</td><td><select data-f="garage">${Object.entries(GAR).map(([v,l])=>`<option value="${v}"${x.garage===v?' selected':''}>${l}</option>`).join('')}</select></td><td id="cdCnt_${k}" style="font-weight:600"></td></tr>`; }).join('')+
+     '<tr><td></td><td><span class="cdot" style="background:#adb5bd"></span> No class</td><td colspan="10" class="note">fits none of the above</td><td id="cdCnt_X"></td></tr>';
+    $('cdMobile').checked=CLS_GLOBAL.mobile; $('cdYf').value=CLS_GLOBAL.yfrom??''; $('cdYt').value=CLS_GLOBAL.yto??''; updateClassCounts(); }
+  function read(){ document.querySelectorAll('#cdTable tr[data-k]').forEach(tr=>{ const k=tr.dataset.k, x=CLS_DEF[k];
+      tr.querySelectorAll('[data-f]').forEach(el=>{ const f=el.dataset.f; if(el.type==='checkbox') x[f]=el.checked; else if(el.tagName==='SELECT') x[f]=el.value; else if(f==='lot'||f==='beds'||f==='baths'||f==='ord') x[f]=+el.value||0; else x[f]=num(el.value); }); });
+    CLS_GLOBAL.mobile=$('cdMobile').checked; CLS_GLOBAL.yfrom=num($('cdYf').value); CLS_GLOBAL.yto=num($('cdYt').value); }
+  d.addEventListener('change',e=>{ if(e.target.closest('#cdTable')||/^cd(Mobile|Yf|Yt)$/.test(e.target.id)){ read(); applyClasses(); } });
+  d.addEventListener('click',e=>{ if(e.target===d||e.target.id==='cdClose') d.style.display='none'; });
+  $('cdRestoreClasses').onclick=()=>{ CLS_DEF=JSON.parse(JSON.stringify(CLS_FACTORY)); CLS_GLOBAL=JSON.parse(JSON.stringify(GLOB_FACTORY)); build(); applyClasses(); };
+  window.openClsDlg=()=>{ build(); d.style.display='flex'; };
+  window.cdMsg=t=>{ $('cdMsg').textContent=t; setTimeout(()=>{ if($('cdMsg').textContent===t) $('cdMsg').textContent=''; },6000); };
+})();
+
+const DEF_KEY='naples-defaults-v1';
+function collectSettings(){
+  const o={v:1, ctl:{}, show:{}, classes:CLS_DEF, global:CLS_GLOBAL, layers:{}, view:{c:[map.getCenter().lat,map.getCenter().lng], z:map.getZoom()}};
+  document.querySelectorAll('#panel input[id], #panel select[id], #homesBar input[id], #homesBar select[id]').forEach(el=>{ if(el.type==='file'||el.id==='addr'||el.id==='lstExit') return; o.ctl[el.id]= el.type==='checkbox'? el.checked : el.value; });
+  document.querySelectorAll('#lstClasses input[data-c]').forEach(i=>o.show[i.dataset.c]=i.checked);
+  LAYERS.forEach(l=>o.layers[l.k]=map.hasLayer(LG[l.k]));
+  return o; }
+function applySettings(o, withView){
+  if(!o) return;
+  Object.entries(o.ctl||{}).forEach(([id,v])=>{ const el=document.getElementById(id); if(!el) return; if(el.type==='checkbox') el.checked=!!v; else el.value=v; });
+  document.querySelectorAll('#lstClasses input[data-c]').forEach(i=>{ if(o.show && i.dataset.c in o.show) i.checked=!!o.show[i.dataset.c]; });
+  if(o.classes){ for(const k of Object.keys(CLS_FACTORY)) if(o.classes[k]) CLS_DEF[k]={...CLS_FACTORY[k],...o.classes[k]}; }
+  if(o.global) CLS_GLOBAL={...GLOB_FACTORY,...o.global};
+  if(withView && o.view){ try{ map.setView(o.view.c,o.view.z,{animate:false}); }catch(e){} }
+  if($('basemap')&&$('basemap').onchange) $('basemap').onchange({target:$('basemap')}); }
+function loadDefaults(){ try{ const o=JSON.parse(localStorage.getItem(DEF_KEY)||'null'); if(o){ applySettings(o,true); return true; } }catch(e){} return false; }
+$('cdSave').onclick=()=>{ try{ localStorage.setItem(DEF_KEY, JSON.stringify(collectSettings())); const L2={}; LAYERS.forEach(l=>L2[l.k]=map.hasLayer(LG[l.k])); L2._r15=1; localStorage.setItem('naples-layers',JSON.stringify(L2)); cdMsg('Saved ✓ — these load automatically each time you open the page in this browser.'); }catch(e){ cdMsg('Could not save: '+e.message); } };
+$('cdFactory').onclick=()=>{ if(!confirm('Restore factory defaults? This clears your saved defaults and reloads the page.')) return; try{ localStorage.removeItem(DEF_KEY); localStorage.removeItem('naples-layers'); }catch(e){} location.reload(); };
+$('cdExport').onclick=()=>{ const blob=new Blob([JSON.stringify(collectSettings(),null,1)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Naples_Map_Settings_r1.json'; document.body.appendChild(a); a.click(); a.remove(); cdMsg('Settings file downloaded.'); };
+$('cdImport').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; try{ const o=JSON.parse(await f.text()); if(!o.ctl) throw new Error('not a settings file'); localStorage.setItem(DEF_KEY,JSON.stringify(o)); localStorage.setItem('naples-layers',JSON.stringify({...o.layers,_r15:1})); location.reload(); }catch(err){ cdMsg('Could not read that file: '+err.message); } });
+$('btnClsDlg').onclick=()=>openClsDlg(); $('hClsDlg').onclick=()=>openClsDlg();
+loadDefaults();
 /* ================= LOAD ================= */
 async function loadAll(force){
   $('btnRun').disabled=true; $('btnRefresh').disabled=true;
