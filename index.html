@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r14</title>
+<title>Naples Home Search Map r15</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -78,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r14</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r15</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -104,7 +104,8 @@
     <select id="evacAllow">
       <option value="0">None (avoid every zone)</option>
       <option value="1">Least-likely zone only (Collier F, Lee/Sarasota/Charlotte E)</option>
-      <option value="2" selected>Two least-likely (Collier E-F, others D-E)</option>
+      <option value="2">Two least-likely (Collier E-F, others D-E)</option>
+      <option value="3" selected>Three least-likely (Collier D-F, others C-E)</option>
     </select></div>
   <div class="btns"><button class="primary" id="btnRun">Recalculate</button></div>
 
@@ -472,7 +473,7 @@ const LAYERS = [
   {k:'groc',    label:'Grocery radius', color:'#27ae60', on:false},
   {k:'hosp',    label:'Hospital radius', color:'#e84393', on:false},
   {k:'club',    label:'Costco / Sam\'s radius', color:'#f2994a', on:false},
-  {k:'roads',   label:'I-75 / US-41 lines used', color:'#1d2327', on:true},
+  {k:'roads',   label:'I-75 / US-41 lines used', color:'#1d2327', on:false},
   {k:'poiClub', label:'Costco / Sam\'s Club stores', color:'#e67e22', on:false},
   {k:'poiHosp', label:'Hospitals', color:'#c0392b', on:true},
   {k:'poiGroc', label:'Grocery stores (Walmart/Publix/Winn-Dixie)', color:'#2e7d32', on:false},
@@ -484,6 +485,7 @@ const LAYERS = [
   {k:'listings',label:'Listings (from your file)', color:'#1b9e3a', on:true}
 ];
 let SAVED_ON={}; try{ SAVED_ON=JSON.parse(localStorage.getItem('naples-layers')||'{}'); }catch(e){}
+if(!SAVED_ON._r15){ delete SAVED_ON.roads; SAVED_ON._r15=1; try{ localStorage.setItem('naples-layers', JSON.stringify(SAVED_ON)); }catch(e){} }  /* r15: freeway lines now off by default */
 LAYERS.forEach(l=>{ if(l.k in SAVED_ON) l.on=!!SAVED_ON[l.k]; });
 const LG = {}; LAYERS.forEach(l=>{ LG[l.k]=L.layerGroup(); if(l.on) LG[l.k].addTo(map); });
 $('layers').innerHTML = LAYERS.map(l=>`<label class="lyr"><input type="checkbox" data-k="${l.k}" ${l.on?'checked':''}><span class="sw" style="background:${l.color}"></span>${l.label}</label>`).join('');
