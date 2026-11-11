@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r17</title>
+<title>Naples Home Search Map r18</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -78,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r17</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r18</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -928,8 +928,10 @@ function fishPopup(f){ const hn=homesNear(f,10);
   return `<b>${esc(f.n)}</b><table class="pop">${rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table><div style="margin-top:4px">${fishLinks(f)}</div><div class="note">Source: OpenStreetMap ${esc(FISH.snapshot)}. Details are volunteer-entered and may be missing or out of date.</div>`; }
 const ADDR_CACHE={};
 async function lookupAddr(lat,lon){ const k=lat+','+lon; if(ADDR_CACHE[k]) return ADDR_CACHE[k];
-  try{ const j=await (await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?f=json&location=${lon},${lat}`)).json();
-    const a=j.address; ADDR_CACHE[k]= a? ((a.Address?a.Address+', ':'')+(a.City||'')+(a.Postal?' '+a.Postal:'')+' (approx., nearest address to the pin)') : 'not found'; }catch(e){ ADDR_CACHE[k]='lookup unavailable'; }
+  try{ const j=await (await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?f=json&distance=800&location=${lon},${lat}`)).json();
+    const a=j.address; if(!a) ADDR_CACHE[k]='no address found — use the Google Maps link';
+    else if(a.Addr_type==='Locality'||a.Addr_type==='Postal') ADDR_CACHE[k]=a.LongLabel.replace(', USA','')+' (general area only — no street address at this spot; use the Google Maps link)';
+    else ADDR_CACHE[k]=a.LongLabel.replace(', USA','')+' (nearest address / place to the pin)'; }catch(e){ ADDR_CACHE[k]='lookup unavailable — use the Google Maps link'; }
   return ADDR_CACHE[k]; }
 map.on('popupopen', async e=>{ const el=e.popup.getElement(); if(!el) return; for(const sp of el.querySelectorAll('.fa-addr')){ sp.textContent=await lookupAddr(+sp.dataset.lat,+sp.dataset.lon); } });
 function renderFish(){
