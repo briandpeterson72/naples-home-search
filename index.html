@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r15</title>
+<title>Naples Home Search Map r16</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -78,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r15</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r16</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -128,6 +128,7 @@
   <div class="note">Load the listings file Claude saved to your Downloads folder. It stays in this browser only and is never uploaded.</div>
   <input type="file" id="lstFile" accept=".json" style="margin:6px 0">
   <div id="lstInfo" class="note"></div>
+  <div id="lstWarn" class="bad" style="font-weight:600;margin:4px 0">⚠ No homes loaded yet — choose Naples_Listings_r2.json above to see home markers.</div>
   <div class="row" id="lstClasses">
     <label><input type="checkbox" data-c="A" checked> <span class="sw" style="display:inline-block;background:#1b9e3a"></span> A</label>
     <label><input type="checkbox" data-c="B" checked> <span class="sw" style="display:inline-block;background:#2563eb"></span> B</label>
@@ -174,6 +175,7 @@
     <label>Lot ac ≥<input type="number" id="fLot" step="0.05" style="width:56px"></label>
     <label>Built ≥<input type="number" id="fYear" step="1" style="width:60px"></label>
     <label>Days on mkt ≤<input type="number" id="fDom" step="1" style="width:56px"></label>
+    <label>Launch or pier ≤ mi<input type="number" id="fFish" min="0" step="1" style="width:52px"></label>
     <label><input type="checkbox" id="fGarage"> Garage confirmed</label>
     <label><input type="checkbox" id="fNoFlag"> Hide "verify price"</label>
     <label><input type="checkbox" id="fMapView"> Only homes in map view</label>
@@ -479,6 +481,11 @@ const LAYERS = [
   {k:'poiGroc', label:'Grocery stores (Walmart/Publix/Winn-Dixie)', color:'#2e7d32', on:false},
   {k:'poiWal',  label:'Walmart stores', color:'#0071ce', on:true},
   {k:'poiAmz',  label:'Amazon facilities & lockers (info only)', color:'#ff9900', on:false},
+  {k:'fPier',   label:'🎣 Fishing piers & spots', color:'#f08c00', on:true},
+  {k:'fRamp',   label:'⚓ Boat launches / ramps', color:'#0b7285', on:true},
+  {k:'fPark',   label:'🌳 Parks, preserves & beaches', color:'#2f9e44', on:true},
+  {k:'fMarina', label:'Marinas', color:'#1c7ed6', on:false},
+  {k:'fRampU',  label:'Boat ramps — unnamed / access not tagged', color:'#868e96', on:false},
   {k:'bound',   label:'Search boundary', color:'#555', on:true},
   {k:'femaLive',label:'FEMA live map (zoom in to see)', color:'#7fb3ff', on:false},
   {k:'draw',    label:'My drawings', color:'#3388ff', on:true},
@@ -720,6 +727,7 @@ function renderListings(){
     LG.listings.addLayer(PIN[h.url]=L.circleMarker([h.lat,h.lon],{pane:'listingsPane',renderer:LST_RENDERER,radius:picked?11:(h.cls==='C'?6:8),color:picked?'#ffcc00':'#fff',weight:picked?4:2,fillColor:CLS_COLOR[h.cls],fillOpacity:.95}).bindPopup(lstPopup(h),{maxWidth:340}));
   }
   if(typeof renderHomes==='function') renderHomes();
+  $('lstWarn').style.display='none';
   $('lstInfo').innerHTML = `${esc(LST.name||'listings')} · pulled ${esc(LST.generated||'?')} · showing ${n}: A ${cnt.A}, B ${cnt.B}, Stretch ${cnt.S}, C ${cnt.C}`;
 }
 function useListings(obj, save){
@@ -746,20 +754,20 @@ function hFiltered(){
   if(!LST) return [];
   const on=new Set([...document.querySelectorAll('#lstClasses input:checked')].map(i=>i.dataset.c)), ex=$('lstExit').value;
   const pmin=num($('fPmin').value), pmax=num($('fPmax').value), beds=num($('fBeds').value), baths=num($('fBaths').value), sq=num($('fSqft').value),
-        lot=num($('fLot').value), yr=num($('fYear').value), dom=num($('fDom').value), gar=$('fGarage').checked, nf=$('fNoFlag').checked, mv=$('fMapView').checked;
-  const b=map.getBounds();
+        lot=num($('fLot').value), yr=num($('fYear').value), dom=num($('fDom').value), fish=num($('fFish').value), gar=$('fGarage').checked, nf=$('fNoFlag').checked, mv=$('fMapView').checked;
+  const b=map.getBounds(); if(fish!=null) LST.rows.forEach(fishDistances);
   return LST.rows.filter(h=> on.has(h.cls) && (!ex||h.exit===ex) && (pmin==null||h.price>=pmin) && (pmax==null||h.price<=pmax) && (beds==null||h.beds>=beds) && (baths==null||h.baths>=baths)
     && (sq==null||(h.sqft||0)>=sq) && (lot==null||(acres(h)||0)>=lot) && (yr==null||(h.year||0)>=yr) && (dom==null||(+h.dom||0)<=dom)
-    && (!gar||/car|yes/.test(h.garage||'')||h.cls==='C'&&/car|yes/.test(h.garage||'')) && (!nf||!h.note) && (!mv||b.contains([h.lat,h.lon])));
+    && (!gar||/car|yes/.test(h.garage||'')||h.cls==='C'&&/car|yes/.test(h.garage||'')) && (fish==null||Math.min(h.launchMi??1e9,h.pierMi??1e9)<=fish) && (!nf||!h.note) && (!mv||b.contains([h.lat,h.lon])));
 }
 const COLS=[['pick',''],['cls','Class'],['addr','Address'],['price','Price'],['ppsf','$/sq ft'],['beds','Beds'],['baths','Baths'],['sqft','Sq ft'],['lot','Lot (ac)'],['year','Built'],
-  ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['tax','Tax/yr'],['water','Water'],['sewer','Sewer'],['storm','Storm protection'],['pool','Pool'],['elevFt','Elev ft'],['walMi','Mi Walmart'],['hospMi','Mi hospital'],['subdivision','Subdivision'],['link','Redfin']];
+  ['garage','Garage'],['type','Type'],['fee','HOA / fee / notes'],['flood','Flood'],['evac','Evac'],['dom','Days on mkt'],['exitMi','Mi to exit'],['status','Status'],['tax','Tax/yr'],['water','Water'],['sewer','Sewer'],['storm','Storm protection'],['pool','Pool'],['elevFt','Elev ft'],['walMi','Mi Walmart'],['hospMi','Mi hospital'],['subdivision','Subdivision'],['launchMi','Mi launch'],['pierMi','Mi pier'],['link','Redfin']];
 function sortVal(h,k){ return k==='ppsf'?ppsf(h): k==='lot'?acres(h): k==='garage'?garN(h): k==='dom'?+h.dom: k==='status'?status(h): k==='fee'?(h.feeNote||''): h[k]; }
-function hRow(h){ const id=h.url; const pc=ppsf(h), ac=acres(h);
+function hRow(h){ fishDistances(h); const id=h.url; const pc=ppsf(h), ac=acres(h);
   return `<tr class="hrow${SEL.has(id)?' sel':''}" data-id="${esc(id)}"><td><input type="checkbox" class="pk" ${SEL.has(id)?'checked':''}></td>
   <td><span class="cdot" style="background:${CLS_COLOR[h.cls]}"></span> ${CLS_NAME[h.cls]}</td><td>${esc(h.addr)}, ${esc(h.city)}</td><td>${money(h.price)}</td><td>${pc?'$'+Math.round(pc):'—'}</td>
   <td>${h.beds}</td><td>${h.baths}</td><td>${h.sqft?Math.round(h.sqft).toLocaleString():'—'}</td><td>${ac?ac.toFixed(2):'—'}</td><td>${h.year||'—'}</td><td>${esc(h.garage||'—')}</td><td>${esc(h.type)}</td>
-  <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td>${h.tax!=null?money(h.tax):''}</td><td>${esc(h.water||'')}</td><td>${esc(h.sewer||'')}</td><td>${esc(h.storm||'')}</td><td>${esc(h.pool||'')}</td><td>${h.elevFt??''}</td><td>${h.walMi??''}</td><td>${h.hospMi??''}</td><td>${esc(h.subdivision||'')}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
+  <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td>${h.tax!=null?money(h.tax):''}</td><td>${esc(h.water||'')}</td><td>${esc(h.sewer||'')}</td><td>${esc(h.storm||'')}</td><td>${esc(h.pool||'')}</td><td>${h.elevFt??''}</td><td>${h.walMi??''}</td><td>${h.hospMi??''}</td><td>${esc(h.subdivision||'')}</td><td>${h.launchMi??''}</td><td>${h.pierMi??''}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
 function renderHomes(){
   const rows=hFiltered(); $('hCount').textContent = LST? `${rows.length} of ${LST.rows.length} homes` : ''; $('hSelN').textContent=SEL.size;
   $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare'); $('hSheet').classList.toggle('primary',HVIEW==='sheet');
@@ -791,6 +799,7 @@ function renderCompare(){
    ['Storm protection',h=>esc(h.storm||'—'),null],['Cooling',h=>esc(h.cooling||'—'),null],['Pool',h=>esc(h.pool||'—'),null],['Waterfront / view',h=>esc(h.waterView||'—'),null],['Parking',h=>`<span style="white-space:normal;display:inline-block;max-width:260px">${esc(h.parking||'—')}</span>`,null],
    ['Elevation',h=>h.elevFt!=null?h.elevFt+' ft':'—',h=>h.elevFt??-1],['Miles to Gulf (approx)',h=>h.coastMi??'—',null],['Risk: flood / fire / heat (1-10)',h=>[h.riskFlood,h.riskFire,h.riskHeat].map(x=>x??'–').join(' / '),h=>-(h.riskFlood??99)],
    ['Walmart',h=>h.walMi!=null?h.walMi+' mi — '+esc(h.walName):'—',h=>-(h.walMi??99)],['Grocery',h=>h.grocMi!=null?h.grocMi+' mi — '+esc(h.grocName):'—',h=>-(h.grocMi??99)],['Hospital',h=>h.hospMi!=null?h.hospMi+' mi — '+esc(h.hospName):'—',h=>-(h.hospMi??99)],['Costco / Sam\'s',h=>h.clubMi!=null?h.clubMi+' mi — '+esc(h.clubName):'—',h=>-(h.clubMi??99)],
+   ['Boat launch',h=>{fishDistances(h); return h.launchMi!=null?h.launchMi+' mi — '+esc(h.launchName):'—';},h=>-(h.launchMi??99)],['Fishing pier / spot',h=>h.pierMi!=null?h.pierMi+' mi — '+esc(h.pierName):'—',h=>-(h.pierMi??99)],['Park / preserve / beach',h=>h.parkMi!=null?h.parkMi+' mi — '+esc(h.parkName):'—',h=>-(h.parkMi??99)],
    ['Redfin Estimate',h=>h.redfinEst?money(h.redfinEst):'—',null],['Original list / changes',h=>(h.origListPrice?money(h.origListPrice):'—')+' / '+(h.priceChanges??0),null],['Last sold',h=>h.lastSoldPrice?money(h.lastSoldPrice)+' on '+h.lastSoldDate:'—',null],
    ['Schools',h=>`<span style="white-space:normal;display:inline-block;max-width:260px">${esc(h.schools||'—')}</span>`,h=>h.schoolAvg??0],['Agent / MLS #',h=>esc((h.agent||'—')+' · '+(h.mls||'')),null],
    ['Description',h=>`<span style="white-space:normal;display:inline-block;max-width:260px;font-size:11.5px">${esc((h.desc||'').slice(0,600))}</span>`,null],
@@ -818,6 +827,7 @@ const SC=[['I-75 Section',h=>h.exit],['Exit #',h=>h.exitRef],['Class',h=>CLS_NAM
  ['Redfin Estimate',h=>h.redfinEst,'usd'],['Price History',h=>h.priceHistory],
  ['Miles to I-75 Exit',h=>h.exitMi,'d1'],['Miles to Walmart',h=>h.walMi,'d1'],['Nearest Walmart',h=>h.walName],['Miles to Grocery',h=>h.grocMi,'d1'],['Nearest Grocery',h=>h.grocName],
  ['Miles to Hospital',h=>h.hospMi,'d1'],['Nearest Hospital',h=>h.hospName],["Miles to Costco/Sam's",h=>h.clubMi,'d1'],["Nearest Costco/Sam's",h=>h.clubName],
+ ['Miles to Boat Launch',h=>h.launchMi,'d1'],['Nearest Boat Launch',h=>h.launchName],['Miles to Fishing Pier/Spot',h=>h.pierMi,'d1'],['Nearest Fishing Pier/Spot',h=>h.pierName],['Miles to Park/Preserve/Beach',h=>h.parkMi,'d1'],['Nearest Park/Preserve/Beach',h=>h.parkName],
  ['School Avg (GreatSchools)',h=>h.schoolAvg,'d1'],['Schools',h=>h.schools],['Listing Agent',h=>h.agent],['MLS #',h=>h.mls],['Description',h=>h.desc],['Redfin Link',null]];
 const SH_NOTES=[['Pulled','Listings and listing details are from Redfin, pulled on the dates shown in the left panel. Checked against the Naples Home Search Map conditions.'],
  ['Class A','Over 0.5 acre, built 2017+, 2+ bed / 2+ bath, garage, under $450,000, no HOA'],['Class B','Over 0.25 acre, built 2002+, 2+ bed / 2+ bath, garage, under $450,000, no HOA'],
@@ -830,6 +840,7 @@ const SH_NOTES=[['Pulled','Listings and listing details are from Redfin, pulled 
  ['Risk scores','First Street scores shown on Redfin, 1 (minimal) to 10 (extreme). Wind score was not available for these listings.'],
  ['Flood Zone / Evac Zone',"From the map: FEMA flood layer and Florida evacuation zones at the home's location."],['Elevation',"USGS elevation at the home's map point, in feet."],
  ['Miles to Gulf','Straight-line distance to the approximate Gulf shoreline (not bays or rivers).'],['Miles to stores / hospital','Straight-line. Grocery = Walmart, Publix or Winn-Dixie. Hospital = general hospitals only.'],
+ ['Boat launch / fishing pier / park','Straight-line miles to the nearest OpenStreetMap-listed public boat ramp (named, or access tagged public), fishing pier or fishing spot, and park/preserve/beach. OpenStreetMap coverage is incomplete; check county sites before relying on a ramp. Not a drive time.'],
  ['School Avg','Average GreatSchools rating (1-10) of the schools Redfin lists as serving the home.'],['Garage','"verify" = listing did not say.'],['$/Sq Ft','Price ÷ Sq Ft'],
  ['On this page','The filters in the bar above act like spreadsheet filters on every tab. Click a column heading on All Homes to sort. Click a row to show that home on the map.']];
 function shFmt(v,f){ if(v==null||v==='') return ''; if(f==='usd') return '$'+Math.round(v).toLocaleString(); if(f==='int') return Math.round(v).toLocaleString(); if(f==='d2') return (+v).toFixed(2); if(f==='d1') return (+v).toFixed(1); return esc(String(v)); }
@@ -842,7 +853,7 @@ function shCells(h,from){ let t='';
     t+=`<td${cl?` class="${cl}"`:''}${st}${long}>${shFmt(v,f)}</td>`; }
   return t; }
 const median = a => { if(!a.length) return null; a=[...a].sort((x,y)=>x-y); const m=a.length>>1; return a.length%2? a[m] : (a[m-1]+a[m])/2; };
-function renderSheet(rows){
+function renderSheet(rows){ rows.forEach(fishDistances);
   const base=[...rows].sort((a,b)=> (b.exitRef-a.exitRef) || (CLS_ORD[a.cls]-CLS_ORD[b.cls]) || (a.price-b.price));
   const exits=[]; base.forEach(h=>{ if(!exits.includes(h.exit)) exits.push(h.exit); });
   const tabs=[['sec','By I-75 Section'],['sum','Summary'],['all','All Homes'],['notes','Column Notes']];
@@ -890,10 +901,34 @@ $('hSheet').onclick=()=>{HVIEW='sheet'; renderHomes();};
 $('hFull').onclick=()=>{ const f=$('right').classList.toggle('full'); $('hFull').textContent=f?'⤡ Show map':'⤢ Full'; if(f) $('homes').classList.remove('min'); setTimeout(()=>map.invalidateSize(),50); };
 $('hClear').onclick=()=>{SEL.clear(); renderListings(); renderHomes();};
 $('hMin').onclick=()=>{ $('homes').classList.toggle('min'); $('hMin').textContent=$('homes').classList.contains('min')?'▴':'▾'; setTimeout(()=>map.invalidateSize(),50); };
-['fPmin','fPmax','fBeds','fBaths','fSqft','fLot','fYear','fDom'].forEach(id=>$(id).addEventListener('input',renderHomes));
+['fPmin','fPmax','fBeds','fBaths','fSqft','fLot','fYear','fDom','fFish'].forEach(id=>$(id).addEventListener('input',renderHomes));
 ['fGarage','fNoFlag','fMapView'].forEach(id=>$(id).addEventListener('change',renderHomes));
 map.on('moveend',()=>{ if($('fMapView').checked) renderHomes(); });
 setTimeout(()=>map.invalidateSize(),100);
+
+
+/* ================= FISHING ACCESS (piers, boat launches, parks) ================= */
+let FISH=null;
+const FISH_ICON = (txt,bg) => L.divIcon({className:'', html:`<div style="width:22px;height:22px;border-radius:50%;background:${bg};border:2px solid #111;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1">${txt}</div>`, iconSize:[22,22], iconAnchor:[11,11]});
+const nearest = (h,list) => { let best=null,bd=1e9; for(const f of list){ const d=hav(h.lat,h.lon,f.lat,f.lon); if(d<bd){bd=d;best=f;} } return best? {mi:Math.round(bd*10)/10, name:best.n} : null; };
+function fishDistances(h){ if(!FISH||h._fd) return;
+  const a=nearest(h,FISH.ramp), b=nearest(h,FISH.pier), c=nearest(h,FISH.park);
+  h.launchMi=a?a.mi:null; h.launchName=a?a.name:''; h.pierMi=b?b.mi:null; h.pierName=b?b.name:''; h.parkMi=c?c.mi:null; h.parkName=c?c.name:''; h._fd=1; }
+function renderFish(){
+  ['fPier','fRamp','fRampU','fMarina','fPark'].forEach(k=>LG[k].clearLayers());
+  if(!FISH) return;
+  FISH.items.forEach(f=>{
+    const tip=f.n+(f.s==='spot'?' (fishing spot)':f.s==='preserve'?' (preserve / protected area)':f.s==='beach'?' (beach)':'');
+    if(f.t==='pier') LG.fPier.addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('🎣','#ffd8a8')}).bindTooltip(tip));
+    else if(f.t==='ramp') (f.s==='unk'?LG.fRampU:LG.fRamp).addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('⚓',f.s==='unk'?'#dee2e6':'#99e9f2')}).bindTooltip(tip));
+    else if(f.t==='marina') LG.fMarina.addLayer(L.circleMarker([f.lat,f.lon],{radius:6,color:'#111',weight:2,fillColor:'#1c7ed6',fillOpacity:1}).bindTooltip(f.n+' (marina)'));
+    else if(f.t==='park') LG.fPark.addLayer(L.circleMarker([f.lat,f.lon],{radius:4.5,color:f.s==='beach'?'#a67c00':'#0b4f1c',weight:2.5,fillColor:f.s==='beach'?'#ffe066':'#ffffff',fillOpacity:1}).bindTooltip(tip));
+  });
+}
+fetch('fishing.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{
+  FISH={snapshot:j.snapshot, ramp:j.items.filter(f=>f.t==='ramp'&&f.s!=='unk'), pier:j.items.filter(f=>f.t==='pier'), park:j.items.filter(f=>f.t==='park'), items:j.items};
+  renderFish(); if(LST){ LST.rows.forEach(h=>{h._fd=0;}); } if(typeof renderHomes==='function') renderHomes();
+}).catch(e=>console.log('fishing.json failed',e));
 
 /* ================= LOAD ================= */
 async function loadAll(force){
