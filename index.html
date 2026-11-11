@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Naples Home Search Map r16</title>
+<title>Naples Home Search Map r17</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2/dist/leaflet-geoman.css">
@@ -78,7 +78,7 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r16</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r17</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
   <h2>Data status</h2>
@@ -166,7 +166,7 @@
 <div id="homes">
   <div id="homesBar">
     <b>Homes</b> <span id="hCount" class="note"></span>
-    <button id="hList" class="primary">List</button><button id="hCompare">Compare (<span id="hSelN">0</span>)</button><button id="hSheet" title="Same layout as Naples_Listings_r2.xlsx">Spreadsheet</button><button id="hClear">Clear picks</button><button id="hFull" title="Hide the map and give this panel the whole window">⤢ Full</button>
+    <button id="hList" class="primary">List</button><button id="hCompare">Compare (<span id="hSelN">0</span>)</button><button id="hFishList" title="Piers, boat launches, parks, marinas with links">Fishing places</button><button id="hSheet" title="Same layout as Naples_Listings_r2.xlsx">Spreadsheet</button><button id="hClear">Clear picks</button><button id="hFull" title="Hide the map and give this panel the whole window">⤢ Full</button>
     <span class="note">|</span>
     <label>Price $<input type="number" id="fPmin" placeholder="min" step="10000"></label><label>– $<input type="number" id="fPmax" placeholder="max" step="10000"></label>
     <label>Beds ≥<input type="number" id="fBeds" min="0" step="1" style="width:48px"></label>
@@ -770,10 +770,11 @@ function hRow(h){ fishDistances(h); const id=h.url; const pc=ppsf(h), ac=acres(h
   <td>${esc(h.feeNote||'')}</td><td>${esc(h.flood||'')}</td><td>${esc(h.evac||'')}</td><td>${esc(h.dom||'')}</td><td>${h.exitMi}</td><td>${status(h)}</td><td>${h.tax!=null?money(h.tax):''}</td><td>${esc(h.water||'')}</td><td>${esc(h.sewer||'')}</td><td>${esc(h.storm||'')}</td><td>${esc(h.pool||'')}</td><td>${h.elevFt??''}</td><td>${h.walMi??''}</td><td>${h.hospMi??''}</td><td>${esc(h.subdivision||'')}</td><td>${h.launchMi??''}</td><td>${h.pierMi??''}</td><td><a href="${encodeURI(h.url)}" target="_blank" rel="noopener">Open ↗</a></td></tr>`; }
 function renderHomes(){
   const rows=hFiltered(); $('hCount').textContent = LST? `${rows.length} of ${LST.rows.length} homes` : ''; $('hSelN').textContent=SEL.size;
-  $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare'); $('hSheet').classList.toggle('primary',HVIEW==='sheet');
-  if(!LST){ return; }
+  $('hList').classList.toggle('primary',HVIEW==='list'); $('hCompare').classList.toggle('primary',HVIEW==='compare'); $('hSheet').classList.toggle('primary',HVIEW==='sheet'); $('hFishList').classList.toggle('primary',HVIEW==='fish');
+  if(!LST && HVIEW!=='fish'){ return; }
   if(HVIEW==='compare') return renderCompare();
   if(HVIEW==='sheet') return renderSheet(rows);
+  if(HVIEW==='fish') return renderFishList();
   const groups={}; rows.forEach(h=>(groups[h.exit]=groups[h.exit]||[]).push(h));
   const keys=Object.keys(groups).sort((a,b)=>(parseInt(b.match(/\d+/))||0)-(parseInt(a.match(/\d+/))||0));
   const k=HSORT.k, d=HSORT.dir;
@@ -914,15 +915,32 @@ const nearest = (h,list) => { let best=null,bd=1e9; for(const f of list){ const 
 function fishDistances(h){ if(!FISH||h._fd) return;
   const a=nearest(h,FISH.ramp), b=nearest(h,FISH.pier), c=nearest(h,FISH.park);
   h.launchMi=a?a.mi:null; h.launchName=a?a.name:''; h.pierMi=b?b.mi:null; h.pierName=b?b.name:''; h.parkMi=c?c.mi:null; h.parkName=c?c.name:''; h._fd=1; }
+const FKIND = f => f.t==='pier'?(f.s==='spot'?'Fishing spot':'Fishing pier'):f.t==='ramp'?(f.s==='unk'?'Boat ramp (unnamed / access not tagged)':'Boat launch'):f.t==='marina'?'Marina':(f.s==='beach'?'Beach':f.s==='preserve'?'Preserve / protected area':'Park');
+const gmap = f => `https://www.google.com/maps/search/?api=1&query=${f.lat},${f.lon}`, gdir = f => `https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lon}`;
+const gsearch = f => 'https://www.google.com/search?q='+encodeURIComponent(f.n+' Florida '+(f.t==='ramp'||f.t==='pier'?'fishing hours fees':'hours'));
+const osmLink = f => `https://www.openstreetmap.org/${{n:'node',w:'way',r:'relation'}[f.id[0]]}/${f.id.slice(1)}`;
+const homesNear = (f,mi) => { if(!LST) return null; const c={A:0,B:0,S:0,C:0}; let n=0; for(const h of LST.rows){ if(hav(f.lat,f.lon,h.lat,h.lon)<=mi){ c[h.cls]++; n++; } } return {n,c}; };
+function fishLinks(f){ return [f.w?`<a href="${encodeURI(f.w)}" target="_blank" rel="noopener">Website ↗</a>`:'', f.wp?`<a href="${encodeURI(f.wp)}" target="_blank" rel="noopener">Wikipedia ↗</a>`:'',
+  `<a href="${gmap(f)}" target="_blank" rel="noopener">Google Maps ↗</a>`,`<a href="${gdir(f)}" target="_blank" rel="noopener">Directions ↗</a>`,`<a href="${gsearch(f)}" target="_blank" rel="noopener">Search hours/fees ↗</a>`,`<a href="${osmLink(f)}" target="_blank" rel="noopener">OpenStreetMap ↗</a>`].filter(Boolean).join(' · '); }
+function fishPopup(f){ const hn=homesNear(f,10);
+  const rows=[['Type',FKIND(f)],['Address',f.ad?esc(f.ad):`<span class="fa-addr" data-lat="${f.lat}" data-lon="${f.lon}">looking up…</span>`],f.op?['Operator',esc(f.op)]:null,f.fee?['Fee',esc(f.fee)]:null,f.hrs?['Hours',esc(f.hrs)]:null,f.ph?['Phone',esc(f.ph)]:null,f.acc?['Access',esc(f.acc)]:null,f.d?['Notes',esc(f.d)]:null,
+    hn?['Homes ≤10 mi',`${hn.n} (A ${hn.c.A} · B ${hn.c.B} · Stretch ${hn.c.S} · C ${hn.c.C})`]:null].filter(Boolean);
+  return `<b>${esc(f.n)}</b><table class="pop">${rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table><div style="margin-top:4px">${fishLinks(f)}</div><div class="note">Source: OpenStreetMap ${esc(FISH.snapshot)}. Details are volunteer-entered and may be missing or out of date.</div>`; }
+const ADDR_CACHE={};
+async function lookupAddr(lat,lon){ const k=lat+','+lon; if(ADDR_CACHE[k]) return ADDR_CACHE[k];
+  try{ const j=await (await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?f=json&location=${lon},${lat}`)).json();
+    const a=j.address; ADDR_CACHE[k]= a? ((a.Address?a.Address+', ':'')+(a.City||'')+(a.Postal?' '+a.Postal:'')+' (approx., nearest address to the pin)') : 'not found'; }catch(e){ ADDR_CACHE[k]='lookup unavailable'; }
+  return ADDR_CACHE[k]; }
+map.on('popupopen', async e=>{ const el=e.popup.getElement(); if(!el) return; for(const sp of el.querySelectorAll('.fa-addr')){ sp.textContent=await lookupAddr(+sp.dataset.lat,+sp.dataset.lon); } });
 function renderFish(){
   ['fPier','fRamp','fRampU','fMarina','fPark'].forEach(k=>LG[k].clearLayers());
   if(!FISH) return;
   FISH.items.forEach(f=>{
     const tip=f.n+(f.s==='spot'?' (fishing spot)':f.s==='preserve'?' (preserve / protected area)':f.s==='beach'?' (beach)':'');
-    if(f.t==='pier') LG.fPier.addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('🎣','#ffd8a8')}).bindTooltip(tip));
-    else if(f.t==='ramp') (f.s==='unk'?LG.fRampU:LG.fRamp).addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('⚓',f.s==='unk'?'#dee2e6':'#99e9f2')}).bindTooltip(tip));
-    else if(f.t==='marina') LG.fMarina.addLayer(L.circleMarker([f.lat,f.lon],{radius:6,color:'#111',weight:2,fillColor:'#1c7ed6',fillOpacity:1}).bindTooltip(f.n+' (marina)'));
-    else if(f.t==='park') LG.fPark.addLayer(L.circleMarker([f.lat,f.lon],{radius:4.5,color:f.s==='beach'?'#a67c00':'#0b4f1c',weight:2.5,fillColor:f.s==='beach'?'#ffe066':'#ffffff',fillOpacity:1}).bindTooltip(tip));
+    if(f.t==='pier') LG.fPier.addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('🎣','#ffd8a8')}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
+    else if(f.t==='ramp') (f.s==='unk'?LG.fRampU:LG.fRamp).addLayer(L.marker([f.lat,f.lon],{icon:FISH_ICON('⚓',f.s==='unk'?'#dee2e6':'#99e9f2')}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
+    else if(f.t==='marina') LG.fMarina.addLayer(L.circleMarker([f.lat,f.lon],{radius:6,color:'#111',weight:2,fillColor:'#1c7ed6',fillOpacity:1}).bindTooltip(f.n+' (marina)').bindPopup(()=>fishPopup(f),{maxWidth:360}));
+    else if(f.t==='park') LG.fPark.addLayer(L.circleMarker([f.lat,f.lon],{radius:4.5,color:f.s==='beach'?'#a67c00':'#0b4f1c',weight:2.5,fillColor:f.s==='beach'?'#ffe066':'#ffffff',fillOpacity:1}).bindTooltip(tip).bindPopup(()=>fishPopup(f),{maxWidth:360}));
   });
 }
 fetch('fishing.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{
@@ -930,6 +948,33 @@ fetch('fishing.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{
   renderFish(); if(LST){ LST.rows.forEach(h=>{h._fd=0;}); } if(typeof renderHomes==='function') renderHomes();
 }).catch(e=>console.log('fishing.json failed',e));
 
+
+/* ================= FISHING PLACES LIST ================= */
+let FQ='', FT='all', FSORT={k:'n',dir:1};
+const FTYPES=[['all','All places'],['pier','Fishing piers & spots'],['ramp','Boat launches (named)'],['rampU','Unnamed ramps'],['marina','Marinas'],['park','Parks'],['preserve','Preserves'],['beach','Beaches']];
+const fType = f => f.t==='park'? (f.s==='preserve'?'preserve':f.s==='beach'?'beach':'park') : (f.t==='ramp'&&f.s==='unk'?'rampU':f.t);
+function renderFishList(){
+  if(!FISH){ $('homesBody').innerHTML='<div class="note" style="padding:10px">Fishing data is loading…</div>'; return; }
+  const q=FQ.trim().toLowerCase();
+  let list=FISH.items.filter(f=>(FT==='all'||fType(f)===FT)&&(!q||(f.n+' '+(f.ad||'')+' '+(f.op||'')).toLowerCase().includes(q)));
+  list.forEach(f=>{ if(LST&&f._n10==null){ const h=homesNear(f,10); f._n10=h.n; } });
+  const k=FSORT.k,d=FSORT.dir; list=[...list].sort((a,b)=>{ const x=k==='kind'?FKIND(a):k==='n10'?(a._n10??-1):(a[k]||''), y=k==='kind'?FKIND(b):k==='n10'?(b._n10??-1):(b[k]||''); return (x>y?1:x<y?-1:0)*d; });
+  const cols=[['kind','Type'],['n','Name'],['ad','Address (OSM)'],['op','Operator'],['fee','Fee'],['hrs','Hours'],['ph','Phone'],['n10','Homes ≤10 mi'],['x','Links']];
+  const bar=`<div id="shTabs" style="gap:8px;align-items:center;padding-bottom:3px"><select id="fTypeSel">${FTYPES.map(([v,l])=>`<option value="${v}"${FT===v?' selected':''}>${l}</option>`).join('')}</select><input id="fSearch" placeholder="search name / address / operator" value="${esc(FQ)}" style="width:240px"><span class="note">${list.length} places · click a row to see it on the map · click a pin for the address, links and nearby homes</span></div>`;
+  const head='<tr>'+cols.map(([c,l])=>`<th data-fk="${c}">${l}${c===k?(d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  const body=list.slice(0,1500).map(f=>`<tr class="frow" data-fid="${esc(f.id)}"><td>${FKIND(f)}</td><td><b>${esc(f.n)}</b></td><td>${esc(f.ad||'')}</td><td>${esc(f.op||'')}</td><td>${esc(f.fee||'')}</td><td>${esc(f.hrs||'')}</td><td>${esc(f.ph||'')}</td><td class="n">${f._n10??''}</td><td>${fishLinks(f)}</td></tr>`).join('');
+  $('homesBody').innerHTML=bar+`<table class="sh">${head}${body}</table>`;
+  const ss=$('fSearch'); ss.addEventListener('input',()=>{ FQ=ss.value; const pos=ss.selectionStart; renderHomes(); const n=$('fSearch'); n.focus(); n.setSelectionRange(pos,pos); });
+  $('fTypeSel').addEventListener('change',e=>{ FT=e.target.value; renderHomes(); });
+}
+$('homesBody').addEventListener('click', e=>{
+  const th=e.target.closest('th[data-fk]'); if(th){ const k=th.dataset.fk; if(k==='x') return; FSORT = FSORT.k===k? {k,dir:-FSORT.dir} : {k,dir:1}; return renderHomes(); }
+  const tr=e.target.closest('tr.frow'); if(!tr||e.target.tagName==='A') return;
+  const f=FISH.items.find(x=>x.id===tr.dataset.fid); if(!f) return;
+  if($('right').classList.contains('full')) $('hFull').click();
+  const lg={pier:'fPier',ramp:f.s==='unk'?'fRampU':'fRamp',marina:'fMarina',park:'fPark'}[f.t]; if(!map.hasLayer(LG[lg])){ LG[lg].addTo(map); const cb=document.querySelector(`input[data-k=${lg}]`); if(cb) cb.checked=true; }
+  map.setView([f.lat,f.lon],Math.max(map.getZoom(),14)); L.popup({maxWidth:360}).setLatLng([f.lat,f.lon]).setContent(fishPopup(f)).openOn(map); });
+$('hFishList').onclick=()=>{ HVIEW='fish'; renderHomes(); };
 /* ================= LOAD ================= */
 async function loadAll(force){
   $('btnRun').disabled=true; $('btnRefresh').disabled=true;
