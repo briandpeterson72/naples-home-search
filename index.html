@@ -78,18 +78,18 @@
 <body>
 <div id="app">
 <div id="panel">
-  <h1>Naples Home Search Map <span class="sub">r22</span></h1>
+  <h1>Naples Home Search Map <span class="sub">r23</span></h1>
   <div class="sub">Green = meets every condition. Click anywhere on the map for a pass/fail breakdown of that spot.</div>
 
-  <h2>Data status</h2>
-  <div class="status" id="status"></div>
+<div id="mvStatus">  <div class="status" id="status"></div>
   <div class="btns">
     <button id="btnRefresh" title="Ignore the saved copy and download fresh data">Re-download data</button>
   </div>
 
+</div>
   <h2>Conditions &amp; settings</h2>
   <div class="note">Distances, flood/evacuation rules, home classes, filters and saved defaults now live on one Settings page.</div>
-  <div class="btns"><button id="btnCondDlg" class="primary">⚙ Open Settings page</button></div>
+  <div class="btns"><button id="btnCondDlg" class="primary">⚙ Open Settings page</button><button id="btnLayersDlg">Layers</button><button id="btnStatusDlg">Data status</button></div>
   <div id="condStash" style="display:none"><div id="condBlock">  <div class="row"><label>Max miles from highway corridor<br><span class="note">I-75, then US-41 after I-75 turns east</span></label><input type="number" id="rCorr" value="15" min="1" step="1"></div>
   <div class="row"><label>Max miles from a grocery store<br><span class="note">Walmart, Publix or Winn-Dixie</span></label><input type="number" id="rGroc" value="10" min="1" step="1"></div>
   <div class="row"><label>Max miles from a Walmart (delivery)</label><input type="number" id="rWal" value="15" min="1" step="1"></div>
@@ -112,11 +112,10 @@
 </div></div>
   <div class="btns"><button class="primary" id="btnRun">Recalculate</button></div>
 
-  <h2>Results</h2>
-  <div id="results" class="sub">Loading data…</div>
+  <div id="mvResults" style="display:none">  <div id="results" class="sub">Loading data…</div>
 
-  <h2>Layers</h2>
-  <div id="layers"></div>
+</div>
+<div id="mvLayers">  <div id="layers"></div>
   <div class="note">Store and hospital pins have a dark border. Home listings have a white border.</div>
   <div class="row"><label>Base map</label>
     <select id="basemap">
@@ -127,6 +126,7 @@
       <option value="light">Light gray</option>
     </select></div>
 
+</div>
   <h2>Listings</h2>
   <div class="note">Load the listings file Claude saved to your Downloads folder. It stays in this browser only and is never uploaded.</div>
   <input type="file" id="lstFile" accept=".json" style="margin:6px 0">
@@ -154,11 +154,11 @@
   </div>
   <div class="note">KML opens in Google Earth (web: Projects → New → Import KML) and Google My Maps (Import).</div>
 
-  <h2>About the data</h2>
-  <div class="note">
+<div id="mvAbout">  <div class="note">
     Highways, grocery stores, hospitals, Walmart, Costco, Sam's Club and Amazon sites come from OpenStreetMap. Amazon doesn't publish delivery areas, and distance to a facility doesn't predict service, so Amazon isn't a map condition: check each shortlisted ZIP code on Amazon. Flood zones are FEMA's National Flood Hazard Layer, where high risk means a Special Flood Hazard Area (A, AE, AH, AO or VE). Evacuation zones come from the Florida Division of Emergency Management's "Know Your Zone" map, with Lee County's own map as a backup.
     Distances are straight-line, not driving distance, and the grid resolution is about 150 m. Before you buy, confirm a specific property on the county's evacuation-zone lookup and FEMA's flood map.
   </div>
+</div>
 </div>
 <div id="right">
 <div id="map"><div id="busy"></div></div>
@@ -1052,7 +1052,7 @@ function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEac
 (function(){
   const css=document.createElement('style'); css.textContent=`#clsDlg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:2000;display:none;align-items:flex-start;justify-content:center;padding-top:30px}
    #clsDlg .card{background:#fff;border-radius:8px;padding:12px 18px;width:min(1100px,96vw);max-height:92vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,.35);font:13px Arial,Helvetica,sans-serif}
-   #clsDlg h3{margin:0} #clsDlg .tabs{display:flex;gap:4px;margin:10px 0;border-bottom:1px solid #ccc} #clsDlg .tabs button{border:1px solid #ccc;border-bottom:none;border-radius:6px 6px 0 0;background:#f3f3f3;padding:6px 14px;cursor:pointer}
+   #clsDlg h3{margin:0} #clsDlg .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0;border-bottom:1px solid #ccc} #clsDlg .tabs button{border:1px solid #ccc;border-bottom:none;border-radius:6px 6px 0 0;background:#f3f3f3;padding:6px 14px;cursor:pointer}
    #clsDlg .tabs button.on{background:#fff;font-weight:700;border-color:#2563eb;color:#2563eb} #clsDlg .pane{display:none} #clsDlg .pane.on{display:block}
    #clsDlg .ccard{border:1px solid #d5d5d5;border-radius:6px;padding:8px 10px;margin:8px 0;background:#fafafa} #clsDlg .ccard.off{opacity:.55}
    #clsDlg .chead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #clsDlg .chead input[type=text]{width:150px;font-weight:700}
@@ -1063,7 +1063,7 @@ function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEac
    #clsDlg #cdPaneCond .row{max-width:620px}`; document.head.appendChild(css);
   const d=document.createElement('div'); d.id='clsDlg';
   d.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Settings</h3><button id="cdClose">Close ✕</button></div>
-   <div class="tabs"><button data-p="cls" class="on">Home classes</button><button data-p="cond">Search conditions</button><button data-p="flt">Home filters</button></div>
+   <div class="tabs"><button data-p="cls" class="on">Home classes</button><button data-p="cond">Search conditions</button><button data-p="flt">Home filters</button><button data-p="status">Data status</button><button data-p="results">Results</button><button data-p="layers">Layers &amp; base map</button><button data-p="about">About</button></div>
    <div class="pane on" id="cdPaneCls">
      <div class="note">A home gets the <b>first</b> enabled class it fits, checking classes in "Check order". Homes that fit none are "No class" (hidden unless ticked in the left panel). Price "under" and lot "over" are strict; all other limits include the number you type. Blank = no limit. Your listings file only holds homes up to $500,000, 2+ beds, houses without an HOA, so HOA settings only change mobile homes with a park fee until a fresh pull that includes HOA homes.</div>
      <div id="cdCards"></div>
@@ -1082,10 +1082,12 @@ function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEac
      <div class="note">Same filters as the Homes bar under the map; changes here apply immediately.</div>
      <div class="fgrid" id="cdFlt"></div>
    </div>
+   <div class="pane" id="cdPaneStatus"></div><div class="pane" id="cdPaneResults"></div><div class="pane" id="cdPaneLayers"></div><div class="pane" id="cdPaneAbout"></div>
    <div class="btnrow"><button id="cdSave" class="primary">💾 Save ALL current settings as my default</button><button id="cdRestoreClasses">Reset classes to original</button><button id="cdFactory">Restore factory defaults</button>
      <button id="cdExport">Export settings file</button><label class="btn" style="border:1px solid #999;border-radius:4px;padding:3px 8px;cursor:pointer">Import settings file<input type="file" id="cdImport" accept=".json" style="display:none"></label><span id="cdMsg" class="ok"></span></div>
    <div class="note" style="margin-top:6px">"Save" stores everything on this page plus which layers are on, the base map and map position. It loads automatically next time you open the page in this browser. Use Export / Import to carry it to another browser or computer.</div></div>`;
   document.body.appendChild(d);
+  [['mvStatus','cdPaneStatus'],['mvResults','cdPaneResults'],['mvLayers','cdPaneLayers'],['mvAbout','cdPaneAbout']].forEach(([a,b])=>{ const e=$(a); e.style.display=''; $(b).appendChild(e); });
   $('cdPaneCond').insertBefore($('condBlock'), $('cdPaneCond').children[2]||null);
   // mirrored home filters
   const FLT=[['fPmin','Price from $','number',10000],['fPmax','Price up to $','number',10000],['fBeds','Beds at least','number',1],['fBaths','Baths at least','number',.5],['fSqft','Sq ft at least','number',100],['fLot','Lot acres at least','number',.05],
@@ -1123,7 +1125,7 @@ function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEac
   d.addEventListener('input',e=>{ if(e.target.closest('#cdCards') && (e.target.type==='text'||e.target.type==='color'||e.target.tagName==='TEXTAREA')){ clearTimeout(tmr); tmr=setTimeout(live,300); } });
   d.addEventListener('click',e=>{ const t=e.target;
     if(t===d||t.id==='cdClose') d.style.display='none';
-    if(t.dataset&&t.dataset.p){ d.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b===t)); d.querySelectorAll('.pane').forEach(p=>p.classList.remove('on')); $({cls:'cdPaneCls',cond:'cdPaneCond',flt:'cdPaneFlt'}[t.dataset.p]).classList.add('on'); if(t.dataset.p==='flt') mirIn(); }
+    if(t.dataset&&t.dataset.p){ d.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b===t)); d.querySelectorAll('.pane').forEach(p=>p.classList.remove('on')); $({cls:'cdPaneCls',cond:'cdPaneCond',flt:'cdPaneFlt',status:'cdPaneStatus',results:'cdPaneResults',layers:'cdPaneLayers',about:'cdPaneAbout'}[t.dataset.p]).classList.add('on'); if(t.dataset.p==='flt') mirIn(); }
     if(t.dataset&&t.dataset.del){ const k=t.dataset.del; if(confirm('Delete '+(CLS_DEF[k].name||k)+'? (Reset classes to original brings back A–D.)')){ read(); delete CLS_DEF[k]; build(); applyClasses(); } } });
   $('cdAdd').onclick=()=>{ read(); let i=1; while(CLS_DEF['N'+i]) i++; const used=new Set(Object.values(CLS_DEF).map(c=>c.name)); let n=0, nm; do{ nm='Class '+String.fromCharCode(65+n++); }while(used.has(nm)&&n<26); if(used.has(nm)) nm='Class '+(i+4);
     const pal=['#e67e22','#c0392b','#16a085','#d4ac0d','#2c3e50','#e84393','#00b8d9','#7f8c8d']; const mx=Math.max(0,...Object.values(CLS_DEF).map(c=>c.ord));
@@ -1139,7 +1141,7 @@ function updateClassCounts(){ if(!LST) return; const c=newCnt(); LST.rows.forEac
 const DEF_KEY='naples-defaults-v1';
 function collectSettings(){
   const o={v:2, ctl:{}, show:{}, classes:CLS_DEF, global:CLS_GLOBAL, layers:{}, view:{c:[map.getCenter().lat,map.getCenter().lng], z:map.getZoom()}};
-  document.querySelectorAll('#panel input[id], #panel select[id], #homesBar input[id], #homesBar select[id], #condBlock input[id], #condBlock select[id], #cdAuto').forEach(el=>{ if(el.type==='file'||el.id==='addr'||el.id==='lstExit') return; o.ctl[el.id]= el.type==='checkbox'? el.checked : el.value; });
+  document.querySelectorAll('#panel input[id], #panel select[id], #homesBar input[id], #homesBar select[id], #condBlock input[id], #condBlock select[id], #clsDlg #cdPaneLayers select[id], #cdAuto').forEach(el=>{ if(el.type==='file'||el.id==='addr'||el.id==='lstExit') return; o.ctl[el.id]= el.type==='checkbox'? el.checked : el.value; });
   document.querySelectorAll('#lstClasses input[data-c]').forEach(i=>o.show[i.dataset.c]=i.checked);
   LAYERS.forEach(l=>o.layers[l.k]=map.hasLayer(LG[l.k]));
   return o; }
@@ -1152,12 +1154,13 @@ function applySettings(o, withView){
   document.querySelectorAll('#lstClasses input[data-c]').forEach(i=>{ if(o.show && i.dataset.c in o.show) i.checked=!!o.show[i.dataset.c]; });
   if(withView && o.view){ try{ map.setView(o.view.c,o.view.z,{animate:false}); }catch(e){} }
   if($('basemap')&&$('basemap').onchange) $('basemap').onchange({target:$('basemap')}); }
-function loadDefaults(){ try{ const o=JSON.parse(localStorage.getItem(DEF_KEY)||'null'); if(o){ applySettings(o,true); return true; } }catch(e){} return false; }
+function loadDefaults(){ try{ const o=JSON.parse(localStorage.getItem(DEF_KEY)||'null'); if(o){ applySettings(o,true); return true; } }catch(e){}
+  fetch('defaults.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(o=>{ if(o&&o.ctl){ applySettings(o,true); LAYERS.forEach(l=>{ if(o.layers&&l.k in o.layers){ const on=o.layers[l.k]; on?LG[l.k].addTo(map):map.removeLayer(LG[l.k]); const cb=document.querySelector('#layers input[data-k="'+l.k+'"]'); if(cb) cb.checked=on; } }); applyClasses(); } }).catch(()=>{}); return false; }
 $('cdSave').onclick=()=>{ try{ localStorage.setItem(DEF_KEY, JSON.stringify(collectSettings())); const L2={}; LAYERS.forEach(l=>L2[l.k]=map.hasLayer(LG[l.k])); L2._r15=1; localStorage.setItem('naples-layers',JSON.stringify(L2)); cdMsg('Saved ✓ — these load automatically each time you open the page in this browser.'); }catch(e){ cdMsg('Could not save: '+e.message); } };
 $('cdFactory').onclick=()=>{ if(!confirm('Restore factory defaults? This clears your saved defaults and reloads the page.')) return; try{ localStorage.removeItem(DEF_KEY); localStorage.removeItem('naples-layers'); }catch(e){} location.reload(); };
 $('cdExport').onclick=()=>{ const blob=new Blob([JSON.stringify(collectSettings(),null,1)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Naples_Map_Settings_r2.json'; document.body.appendChild(a); a.click(); a.remove(); cdMsg('Settings file downloaded.'); };
 $('cdImport').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; try{ const o=JSON.parse(await f.text()); if(!o.ctl) throw new Error('not a settings file'); localStorage.setItem(DEF_KEY,JSON.stringify(o)); localStorage.setItem('naples-layers',JSON.stringify({...o.layers,_r15:1})); location.reload(); }catch(err){ cdMsg('Could not read that file: '+err.message); } });
-$('btnCondDlg').onclick=()=>openClsDlg('cond');
+$('btnCondDlg').onclick=()=>openClsDlg('cond'); $('btnLayersDlg').onclick=()=>openClsDlg('layers'); $('btnStatusDlg').onclick=()=>openClsDlg('status');
 $('btnClsDlg').onclick=()=>openClsDlg('cls'); $('hClsDlg').onclick=()=>openClsDlg('cls');
 loadDefaults();
 /* ================= LOAD ================= */
